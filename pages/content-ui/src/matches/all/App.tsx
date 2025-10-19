@@ -216,7 +216,7 @@ export default function App() {
           onMouseUp={finishSelection}
           onDoubleClick={finishSelection}
           style={{ position: 'fixed', inset: 0, zIndex: 2147483646, cursor: 'crosshair' }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.3)' }} />
+          {!selectionRect && <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.8)' }} />}
           {selectionRect && (
             <div
               style={{
@@ -225,7 +225,7 @@ export default function App() {
                 top: `${selectionRect.y}px`,
                 width: `${selectionRect.width}px`,
                 height: `${selectionRect.height}px`,
-                boxShadow: '0 0 0 9999px rgba(0,0,0,0.55) inset',
+                boxShadow: '0 0 0 9999px rgba(0,0,0,0.8)',
                 outline: '2px solid #7c3aed',
                 borderRadius: '4px',
                 background: 'transparent',
