@@ -23,6 +23,16 @@ const UI_I18N = {
     history: 'History',
     noChats: 'No chats yet',
     send: 'Send',
+    webAccess: 'Web Access',
+    webOn: 'On',
+    webOff: 'Off',
+    model: 'Model',
+    model_quick: 'Quick – fast & lightweight',
+    model_deep: 'Deep – accurate & heavy',
+    nav_ask: 'Ask AI',
+    nav_read: 'Read',
+    nav_write: 'Write',
+    comingSoon: 'Coming soon',
   },
   ru: {
     title: 'LLM Чат',
@@ -41,6 +51,16 @@ const UI_I18N = {
     history: 'История',
     noChats: 'Чатов пока нет',
     send: 'Отправить',
+    webAccess: 'Доступ к вебу',
+    webOn: 'Вкл',
+    webOff: 'Выкл',
+    model: 'Модель',
+    model_quick: 'Быстрая — лёгкая и оперативная',
+    model_deep: 'Глубокая — точная, но тяжелее',
+    nav_ask: 'Ask AI',
+    nav_read: 'Read',
+    nav_write: 'Write',
+    comingSoon: 'Скоро будет',
   },
 } as const;
 
@@ -98,6 +118,8 @@ const initialAssistant: ChatMessage = {
 const STORAGE_KEYS = {
   threads: 'chatThreads',
   activeId: 'activeChatId',
+  webAccess: 'webAccessEnabled',
+  llmModel: 'llmModel',
 } as const;
 
 const SidePanel = () => {
@@ -113,7 +135,15 @@ const SidePanel = () => {
   const [imageActive, setImageActive] = useState<boolean>(false);
   const [fileActive, setFileActive] = useState<boolean>(false);
   const [newChatActive, setNewChatActive] = useState<boolean>(false);
-  const [historyOpen, setHistoryOpen] = useState<boolean>(false);
+  const [historySheetOpen, setHistorySheetOpen] = useState<boolean>(false);
+  const [webPopoverOpen, setWebPopoverOpen] = useState<boolean>(false);
+  const [webAccessEnabled, setWebAccessEnabled] = useState<boolean>(false);
+  const [modelPopoverOpen, setModelPopoverOpen] = useState<boolean>(false);
+  const [llmModel, setLlmModel] = useState<'quick' | 'deep'>('quick');
+
+  const [uiLocale, setUiLocale] = useState<'en' | 'ru'>('en');
+  const [langOpen, setLangOpen] = useState<boolean>(false);
+  const [mode, setMode] = useState<'ask' | 'read' | 'write'>('ask');
 
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
@@ -122,51 +152,61 @@ const SidePanel = () => {
   const imageActiveTimeoutRef = useRef<number | undefined>(undefined);
   const fileActiveTimeoutRef = useRef<number | undefined>(undefined);
 
-  const [uiLocale, setUiLocale] = useState<'en' | 'ru'>('en');
-  const [langOpen, setLangOpen] = useState<boolean>(false);
   const t = UI_I18N[uiLocale];
 
-  // Load persisted locale and chats
+  // Load persisted locale, chats and toggles
   useEffect(() => {
-    chrome.storage?.local.get([STORAGE_KEYS.threads, STORAGE_KEYS.activeId, 'uiLocale']).then(store => {
-      const v = store?.uiLocale as 'en' | 'ru' | undefined;
-      const localeForInit: 'en' | 'ru' = v === 'ru' ? 'ru' : 'en';
-      if (v === 'en' || v === 'ru') setUiLocale(v);
+    chrome.storage?.local
+      .get([STORAGE_KEYS.threads, STORAGE_KEYS.activeId, 'uiLocale', STORAGE_KEYS.webAccess, STORAGE_KEYS.llmModel])
+      .then(store => {
+        const v = store?.uiLocale as 'en' | 'ru' | undefined;
+        const localeForInit: 'en' | 'ru' = v === 'ru' ? 'ru' : 'en';
+        if (v === 'en' || v === 'ru') setUiLocale(v);
 
-      const loadedThreads = (store?.[STORAGE_KEYS.threads] as ChatThread[] | undefined) ?? [];
-      const loadedActive = (store?.[STORAGE_KEYS.activeId] as string | undefined) ?? '';
+        const web = store?.[STORAGE_KEYS.webAccess] as boolean | undefined;
+        if (typeof web === 'boolean') setWebAccessEnabled(web);
 
-      if (loadedThreads.length === 0) {
-        const id = `chat-${Date.now()}`;
-        const initial: ChatThread = {
-          id,
-          title: localeForInit === 'ru' ? 'Новый чат' : 'New chat',
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          messages: [initialAssistant],
-        };
-        setThreads([initial]);
-        setActiveId(id);
-        setMessages(initial.messages);
-      } else {
-        setThreads(loadedThreads);
-        const useId =
-          loadedActive && loadedThreads.some(c => c.id === loadedActive) ? loadedActive : loadedThreads[0].id;
-        setActiveId(useId);
-        const active = loadedThreads.find(c => c.id === useId)!;
-        setMessages(active.messages);
-      }
-    });
+        const model = store?.[STORAGE_KEYS.llmModel] as 'quick' | 'deep' | undefined;
+        if (model === 'quick' || model === 'deep') setLlmModel(model);
+
+        const loadedThreads = (store?.[STORAGE_KEYS.threads] as ChatThread[] | undefined) ?? [];
+        const loadedActive = (store?.[STORAGE_KEYS.activeId] as string | undefined) ?? '';
+
+        if (loadedThreads.length === 0) {
+          const id = `chat-${Date.now()}`;
+          const initial: ChatThread = {
+            id,
+            title: localeForInit === 'ru' ? 'Новый чат' : 'New chat',
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            messages: [initialAssistant],
+          };
+          setThreads([initial]);
+          setActiveId(id);
+          setMessages(initial.messages);
+        } else {
+          setThreads(loadedThreads);
+          const useId =
+            loadedActive && loadedThreads.some(c => c.id === loadedActive) ? loadedActive : loadedThreads[0].id;
+          setActiveId(useId);
+          const active = loadedThreads.find(c => c.id === useId)!;
+          setMessages(active.messages);
+        }
+      });
   }, []);
 
-  // Persist threads and active id
   useEffect(() => {
     void chrome.storage?.local.set({ [STORAGE_KEYS.threads]: threads, [STORAGE_KEYS.activeId]: activeId });
   }, [threads, activeId]);
-
   useEffect(() => {
     void chrome.storage?.local.set({ uiLocale });
   }, [uiLocale]);
+  useEffect(() => {
+    void chrome.storage?.local.set({ [STORAGE_KEYS.webAccess]: webAccessEnabled });
+  }, [webAccessEnabled]);
+  useEffect(() => {
+    void chrome.storage?.local.set({ [STORAGE_KEYS.llmModel]: llmModel });
+  }, [llmModel]);
 
   const canSend = useMemo(() => input.trim().length > 0 || attachments.length > 0, [input, attachments]);
 
@@ -373,9 +413,111 @@ const SidePanel = () => {
 
   const sortedThreads = useMemo(() => [...threads].sort((a, b) => b.updatedAt - a.updatedAt), [threads]);
 
+  // UI components: right vertical toolbar
+  const RightToolbar = () => (
+    <div
+      className={cn(
+        'flex w-16 flex-col items-center gap-4 border-l p-2',
+        isLight ? 'border-slate-300 bg-slate-100' : 'border-slate-700 bg-slate-900',
+      )}>
+      {/* Ask AI */}
+      <button
+        onClick={() => setMode('ask')}
+        aria-pressed={mode === 'ask'}
+        className={cn(
+          'group flex h-10 w-10 items-center justify-center rounded-lg ring-1 transition-colors',
+          mode === 'ask'
+            ? isLight
+              ? 'bg-violet-600 text-white ring-violet-500'
+              : 'bg-violet-600 text-white ring-violet-400'
+            : isLight
+              ? 'bg-slate-200 text-gray-900 ring-black/10 hover:bg-slate-300'
+              : 'bg-slate-700 text-white ring-white/10 hover:bg-slate-600',
+        )}
+        title={t.nav_ask}
+        aria-label={t.nav_ask}>
+        {/* star-like */}
+        <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2l1.8 4.6L18 8.5l-4.2 2 1 4.7L12 13.7 9.2 15.2l1-4.7L6 8.5l4.2-1.9L12 2z" />
+        </svg>
+      </button>
+      <div className={cn('mt-1 text-center text-[10px] font-semibold', isLight ? 'text-gray-900' : 'text-gray-100')}>
+        {t.nav_ask}
+      </div>
+
+      {/* Read */}
+      <button
+        onClick={() => setMode('read')}
+        aria-pressed={mode === 'read'}
+        className={cn(
+          'group mt-3 flex h-10 w-10 items-center justify-center rounded-lg ring-1 transition-colors',
+          mode === 'read'
+            ? isLight
+              ? 'bg-violet-600 text-white ring-violet-500'
+              : 'bg-violet-600 text-white ring-violet-400'
+            : isLight
+              ? 'bg-slate-200 text-gray-900 ring-black/10 hover:bg-slate-300'
+              : 'bg-slate-700 text-white ring-white/10 hover:bg-slate-600',
+        )}
+        title={t.nav_read}
+        aria-label={t.nav_read}>
+        <svg
+          aria-hidden="true"
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round">
+          <path d="M3 19V6a2 2 0 0 1 2-2h6v17H5a2 2 0 0 1-2-2z" />
+          <path d="M13 21V4h6a2 2 0 0 1 2 2v13" />
+        </svg>
+      </button>
+      <div className={cn('mt-1 text-center text-[10px] font-semibold', isLight ? 'text-gray-900' : 'text-gray-100')}>
+        {t.nav_read}
+      </div>
+
+      {/* Write */}
+      <button
+        onClick={() => setMode('write')}
+        aria-pressed={mode === 'write'}
+        className={cn(
+          'group mt-3 flex h-10 w-10 items-center justify-center rounded-lg ring-1 transition-colors',
+          mode === 'write'
+            ? isLight
+              ? 'bg-violet-600 text-white ring-violet-500'
+              : 'bg-violet-600 text-white ring-violet-400'
+            : isLight
+              ? 'bg-slate-200 text-gray-900 ring-black/10 hover:bg-slate-300'
+              : 'bg-slate-700 text-white ring-white/10 hover:bg-slate-600',
+        )}
+        title={t.nav_write}
+        aria-label={t.nav_write}>
+        <svg
+          aria-hidden="true"
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round">
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+        </svg>
+      </button>
+      <div className={cn('mt-1 text-center text-[10px] font-semibold', isLight ? 'text-gray-900' : 'text-gray-100')}>
+        {t.nav_write}
+      </div>
+    </div>
+  );
+
   return (
     <div className={cn('App', 'text-left', isLight ? 'bg-slate-50' : 'bg-gray-800')}>
-      <div className={cn('flex h-full flex-col', isLight ? 'text-gray-900' : 'text-gray-100')}>
+      <div className={cn('relative flex h-full flex-col', isLight ? 'text-gray-900' : 'text-gray-100')}>
         {/* Header */}
         <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-3 py-2 dark:border-slate-700">
           <div className="flex items-center gap-2">
@@ -435,7 +577,8 @@ const SidePanel = () => {
                       uiLocale === 'en' ? 'font-semibold' : undefined,
                     )}>
                     <span>🇺🇸</span>
-                    <span>{t.lang_en}</span>
+                    <span className="flex-1">{t.lang_en}</span>
+                    {uiLocale === 'en' && <span aria-hidden>✓</span>}
                   </button>
                   <button
                     onClick={() => {
@@ -449,60 +592,146 @@ const SidePanel = () => {
                       uiLocale === 'ru' ? 'font-semibold' : undefined,
                     )}>
                     <span>🇷🇺</span>
-                    <span>{t.lang_ru}</span>
+                    <span className="flex-1">{t.lang_ru}</span>
+                    {uiLocale === 'ru' && <span aria-hidden>✓</span>}
                   </button>
                 </div>
               )}
             </div>
+
+            {/* History button moved remains here */}
+            <button
+              onClick={() => setHistorySheetOpen(true)}
+              title={t.history}
+              aria-label={t.history}
+              className={cn(
+                'group relative inline-flex h-8 w-8 items-center justify-center rounded-md border text-base transition-colors',
+                isLight
+                  ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
+                  : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
+              )}>
+              <svg
+                aria-hidden="true"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l4 4" />
+              </svg>
+              <span
+                className={cn(
+                  'pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity',
+                  isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
+                  'group-hover:opacity-100 group-focus-visible:opacity-100',
+                )}>
+                {t.history}
+              </span>
+            </button>
           </div>
         </div>
 
-        {/* Messages */}
-        <div ref={messagesContainerRef} className="flex-1 overflow-y-auto px-3 py-3">
-          <div className="flex flex-col gap-3">
-            {messages.map(m => (
-              <div key={m.id} className={cn('flex', m.role === 'user' ? 'justify-end' : 'justify-start')}>
-                {m.type === 'text' ? (
-                  <div
-                    className={cn(
-                      'max-w-[80%] whitespace-pre-wrap break-words rounded-2xl px-3 py-2 shadow-sm',
-                      m.role === 'user'
-                        ? 'bg-violet-600 text-white'
-                        : isLight
-                          ? 'bg-white text-gray-900 ring-1 ring-black/5'
-                          : 'bg-slate-700 text-gray-100 ring-1 ring-white/10',
-                    )}>
-                    {m.content}
+        {/* Main content area: chat + external right sidebar */}
+        <div className="relative flex h-full">
+          {/* Scrollable content area */}
+          <div ref={messagesContainerRef} className="h-full flex-1 overflow-y-auto px-3 py-3">
+            {mode === 'ask' ? (
+              <div className="flex flex-col gap-3">
+                {messages.map(m => (
+                  <div key={m.id} className={cn('flex', m.role === 'user' ? 'justify-end' : 'justify-start')}>
+                    {m.type === 'text' ? (
+                      <div
+                        className={cn(
+                          'max-w-[80%] whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-left shadow-sm',
+                          m.role === 'user'
+                            ? 'bg-violet-600 text-white'
+                            : isLight
+                              ? 'bg-white text-gray-900 ring-1 ring-black/5'
+                              : 'bg-slate-700 text-gray-100 ring-1 ring-white/10',
+                        )}>
+                        {m.content}
+                      </div>
+                    ) : m.type === 'image' ? (
+                      <div
+                        className={cn(
+                          'max-w-[80%] overflow-hidden rounded-2xl shadow-sm ring-1',
+                          isLight ? 'ring-black/5' : 'ring-white/10',
+                        )}>
+                        <img src={m.dataUrl} alt="screenshot" className="block max-w-full" />
+                      </div>
+                    ) : (
+                      <div
+                        className={cn(
+                          'max-w-[80%] rounded-2xl shadow-sm ring-1',
+                          isLight ? 'bg-white text-gray-900 ring-black/5' : 'bg-slate-700 text-gray-100 ring-white/10',
+                        )}>
+                        <div className="flex items-center gap-2 px-3 py-2 text-sm">
+                          <span>📎</span>
+                          <span className="font-medium">{m.name}</span>
+                          <span className="opacity-60">({Math.ceil(m.size / 1024)} KB)</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ) : m.type === 'image' ? (
-                  <div
-                    className={cn(
-                      'max-w-[80%] overflow-hidden rounded-2xl shadow-sm ring-1',
-                      isLight ? 'ring-black/5' : 'ring-white/10',
-                    )}>
-                    <img src={m.dataUrl} alt="screenshot" className="block max-w-full" />
-                  </div>
-                ) : (
-                  <div
-                    className={cn(
-                      'max-w-[80%] rounded-2xl shadow-sm ring-1',
-                      isLight ? 'bg-white text-gray-900 ring-black/5' : 'bg-slate-700 text-gray-100 ring-white/10',
-                    )}>
-                    <div className="flex items-center gap-2 px-3 py-2 text-sm">
-                      <span>📎</span>
-                      <span className="font-medium">{m.name}</span>
-                      <span className="opacity-60">({Math.ceil(m.size / 1024)} KB)</span>
-                    </div>
-                  </div>
-                )}
+                ))}
               </div>
-            ))}
+            ) : (
+              <div className="flex h-full items-center justify-center">
+                <div className="text-sm opacity-70">{t.comingSoon}</div>
+              </div>
+            )}
           </div>
+
+          {/* External right sidebar takes full height */}
+          <RightToolbar />
         </div>
 
-        {/* Toolbar */}
+        {/* Toolbar row (new chat, actions, selectors) remains below ... */}
+        {/* existing tools and composer remain unchanged; composer shows only for Ask mode */}
         <div className="border-t border-slate-200 px-3 py-1 dark:border-slate-700">
           <div className="flex items-center gap-2">
+            <button
+              onClick={onNewChat}
+              className={cn(
+                'group relative inline-flex items-center justify-center rounded-md border px-2 py-1 text-sm transition-colors',
+                newChatActive
+                  ? isLight
+                    ? 'border-violet-500 bg-violet-100 text-violet-700'
+                    : 'border-violet-400 bg-violet-700/40 text-violet-200'
+                  : isLight
+                    ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
+                    : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
+              )}
+              title={t.newChat}
+              aria-pressed={newChatActive}
+              aria-label={t.newChat}>
+              <svg
+                aria-hidden="true"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round">
+                <path d="M12 5v14" />
+                <path d="M5 12h14" />
+              </svg>
+              <span
+                className={cn(
+                  'pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity',
+                  isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
+                  'group-hover:opacity-100 group-focus-visible:opacity-100',
+                )}>
+                {t.newChat}
+              </span>
+            </button>
+
             <button
               onClick={requestScreenshot}
               className={cn(
@@ -619,18 +848,18 @@ const SidePanel = () => {
               </span>
             </button>
 
-            {/* History selector placed before New Chat */}
+            {/* Model selector popover */}
             <div
               className="relative"
               onBlur={e => {
-                if (!e.currentTarget.contains(e.relatedTarget as Node)) setHistoryOpen(false);
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) setModelPopoverOpen(false);
               }}>
               <button
-                onClick={() => setHistoryOpen(v => !v)}
-                aria-haspopup="listbox"
-                aria-expanded={historyOpen}
-                title={t.history}
-                aria-label={t.history}
+                onClick={() => setModelPopoverOpen(v => !v)}
+                title={t.model}
+                aria-label={t.model}
+                aria-haspopup="dialog"
+                aria-expanded={modelPopoverOpen}
                 className={cn(
                   'group relative inline-flex h-8 w-8 items-center justify-center rounded-md border text-base transition-colors',
                   isLight
@@ -647,8 +876,7 @@ const SidePanel = () => {
                   strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="9" />
-                  <path d="M12 7v5l4 4" />
+                  <path d="M12 2c-3 0-5 2-5 5v1H6a4 4 0 0 0 0 8h1v1c0 3 2 5 5 5s5-2 5-5v-1h1a4 4 0 0 0 0-8h-1V7c0-3-2-5-5-5z" />
                 </svg>
                 <span
                   className={cn(
@@ -656,59 +884,135 @@ const SidePanel = () => {
                     isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
                     'group-hover:opacity-100 group-focus-visible:opacity-100',
                   )}>
-                  {t.history}
+                  {t.model}
                 </span>
               </button>
-              {historyOpen && (
+              {modelPopoverOpen && (
                 <div
                   className={cn(
-                    'absolute z-20 mt-2 w-64 overflow-hidden rounded-md border text-sm shadow-lg',
+                    'absolute bottom-full right-0 z-20 mb-2 w-48 rounded-md border p-2 text-sm shadow-lg',
                     isLight ? 'border-slate-200 bg-white text-gray-900' : 'border-slate-700 bg-slate-800 text-gray-100',
                   )}>
-                  {sortedThreads.length === 0 ? (
-                    <div className="px-3 py-2 opacity-60">{t.noChats}</div>
-                  ) : (
-                    sortedThreads.map(th => (
-                      <button
-                        key={th.id}
-                        onClick={() => {
-                          activateThread(th.id);
-                          setHistoryOpen(false);
-                        }}
-                        role="option"
-                        aria-selected={activeId === th.id}
-                        className={cn(
-                          'flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-slate-100 focus:bg-slate-100 dark:hover:bg-slate-700 dark:focus:bg-slate-700',
-                          activeId === th.id ? 'font-semibold' : undefined,
-                        )}>
-                        <span className="truncate">
-                          {th.title || (uiLocale === 'ru' ? 'Без названия' : 'Untitled')}
-                        </span>
-                        <span className="ml-auto text-xs opacity-60">
-                          {new Date(th.updatedAt).toLocaleTimeString()}
-                        </span>
-                      </button>
-                    ))
-                  )}
+                  <div className="mb-2 font-medium">{t.model}</div>
+                  <button
+                    onClick={() => {
+                      setLlmModel('quick');
+                      setModelPopoverOpen(false);
+                    }}
+                    className={cn(
+                      'flex w-full items-center justify-between rounded px-2 py-1 hover:bg-slate-100 focus:bg-slate-100 dark:hover:bg-slate-700 dark:focus:bg-slate-700',
+                      llmModel === 'quick' ? 'font-semibold' : undefined,
+                    )}
+                    aria-pressed={llmModel === 'quick'}>
+                    <span>{t.model_quick}</span>
+                    {llmModel === 'quick' && <span aria-hidden>✓</span>}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setLlmModel('deep');
+                      setModelPopoverOpen(false);
+                    }}
+                    className={cn(
+                      'mt-1 flex w-full items-center justify-between rounded px-2 py-1 hover:bg-slate-100 focus:bg-slate-100 dark:hover:bg-slate-700 dark:focus:bg-slate-700',
+                      llmModel === 'deep' ? 'font-semibold' : undefined,
+                    )}
+                    aria-pressed={llmModel === 'deep'}>
+                    <span>{t.model_deep}</span>
+                    {llmModel === 'deep' && <span aria-hidden>✓</span>}
+                  </button>
                 </div>
               )}
             </div>
 
-            <button
-              onClick={onNewChat}
-              className={cn(
-                'group relative inline-flex items-center justify-center rounded-md border px-2 py-1 text-sm transition-colors',
-                newChatActive
-                  ? isLight
-                    ? 'border-violet-500 bg-violet-100 text-violet-700'
-                    : 'border-violet-400 bg-violet-700/40 text-violet-200'
-                  : isLight
+            {/* Web Access toggle popover */}
+            <div
+              className="relative"
+              onBlur={e => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) setWebPopoverOpen(false);
+              }}>
+              <button
+                onClick={() => setWebPopoverOpen(v => !v)}
+                title={t.webAccess}
+                aria-label={t.webAccess}
+                aria-haspopup="dialog"
+                aria-expanded={webPopoverOpen}
+                className={cn(
+                  'group relative inline-flex h-8 w-8 items-center justify-center rounded-md border text-base transition-colors',
+                  isLight
                     ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
                     : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
+                )}>
+                <svg
+                  aria-hidden="true"
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round">
+                  <path d="M2 12h20" />
+                  <path d="M12 2a10 10 0 0 1 0 20a10 10 0 0 1 0-20z" />
+                  <path d="M2 12a10 5 0 0 0 20 0a10 5 0 0 0-20 0z" />
+                </svg>
+                <span
+                  className={cn(
+                    'pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity',
+                    isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
+                    'group-hover:opacity-100 group-focus-visible:opacity-100',
+                  )}>
+                  {t.webAccess}
+                </span>
+              </button>
+              {webPopoverOpen && (
+                <div
+                  className={cn(
+                    'absolute bottom-full right-0 z-20 mb-2 w-44 rounded-md border p-2 text-sm shadow-lg',
+                    isLight ? 'border-slate-200 bg-white text-gray-900' : 'border-slate-700 bg-slate-800 text-gray-100',
+                  )}>
+                  <div className="mb-2 font-medium">{t.webAccess}</div>
+                  <button
+                    onClick={() => {
+                      setWebAccessEnabled(true);
+                      setWebPopoverOpen(false);
+                    }}
+                    className={cn(
+                      'flex w-full items-center justify-between rounded px-2 py-1 hover:bg-slate-100 focus:bg-slate-100 dark:hover:bg-slate-700 dark:focus:bg-slate-700',
+                      webAccessEnabled ? 'font-semibold' : undefined,
+                    )}
+                    aria-pressed={webAccessEnabled}>
+                    <span>{t.webOn}</span>
+                    {webAccessEnabled && <span aria-hidden>✓</span>}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setWebAccessEnabled(false);
+                      setWebPopoverOpen(false);
+                    }}
+                    className={cn(
+                      'mt-1 flex w-full items-center justify-between rounded px-2 py-1 hover:bg-slate-100 focus:bg-slate-100 dark:hover:bg-slate-700 dark:focus:bg-slate-700',
+                      !webAccessEnabled ? 'font-semibold' : undefined,
+                    )}
+                    aria-pressed={!webAccessEnabled}>
+                    <span>{t.webOff}</span>
+                    {!webAccessEnabled && <span aria-hidden>✓</span>}
+                  </button>
+                </div>
               )}
-              title={t.newChat}
-              aria-pressed={newChatActive}
-              aria-label={t.newChat}>
+            </div>
+
+            {/* History button opens bottom sheet */}
+            <button
+              onClick={() => setHistorySheetOpen(true)}
+              title={t.history}
+              aria-label={t.history}
+              className={cn(
+                'group relative inline-flex h-8 w-8 items-center justify-center rounded-md border text-base transition-colors',
+                isLight
+                  ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
+                  : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
+              )}>
               <svg
                 aria-hidden="true"
                 width="20"
@@ -719,8 +1023,8 @@ const SidePanel = () => {
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round">
-                <path d="M12 5v14" />
-                <path d="M5 12h14" />
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l4 4" />
               </svg>
               <span
                 className={cn(
@@ -728,7 +1032,7 @@ const SidePanel = () => {
                   isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
                   'group-hover:opacity-100 group-focus-visible:opacity-100',
                 )}>
-                {t.newChat}
+                {t.history}
               </span>
             </button>
 
@@ -746,93 +1050,158 @@ const SidePanel = () => {
         </div>
 
         {/* Composer */}
-        <div className="border-t border-slate-200 px-3 py-2 dark:border-slate-700">
-          {attachments.length > 0 && (
-            <div className="mb-2 flex flex-wrap gap-2">
-              {attachments.map(a => (
-                <div
-                  key={a.id}
-                  className="group relative inline-block overflow-hidden rounded-md ring-1 ring-black/10 dark:ring-white/10">
-                  {a.kind === 'image' ? (
-                    <img
-                      src={(a as Extract<Attachment, { kind: 'image' }>).dataUrl}
-                      alt="attachment"
-                      className="block h-16 w-16 object-cover"
-                    />
-                  ) : (
-                    <div
-                      className={cn(
-                        'flex h-16 w-48 items-center gap-2 truncate px-2 text-sm',
-                        isLight ? 'bg-white text-gray-900' : 'bg-slate-700 text-gray-100',
-                      )}>
-                      <span>📎</span>
-                      <span className="truncate">{(a as Extract<Attachment, { kind: 'file' }>).name}</span>
-                      <span className="opacity-60">
-                        ({Math.ceil((a as Extract<Attachment, { kind: 'file' }>).size / 1024)} KB)
-                      </span>
-                    </div>
-                  )}
-                  <button
-                    onClick={() => removeAttachment(a.id)}
-                    className="absolute right-0 top-0 m-1 hidden rounded bg-black/60 px-1 py-0.5 text-xs text-white group-hover:block"
-                    aria-label={t.removeAttachment}>
-                    ✕
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+        {mode === 'ask' && (
+          <div className="border-t border-slate-200 px-3 py-2 dark:border-slate-700">
+            {attachments.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-2">
+                {attachments.map(a => (
+                  <div
+                    key={a.id}
+                    className="group relative inline-block overflow-hidden rounded-md ring-1 ring-black/10 dark:ring-white/10">
+                    {a.kind === 'image' ? (
+                      <img
+                        src={(a as Extract<Attachment, { kind: 'image' }>).dataUrl}
+                        alt="attachment"
+                        className="block h-16 w-16 object-cover"
+                      />
+                    ) : (
+                      <div
+                        className={cn(
+                          'flex h-16 w-48 items-center gap-2 truncate px-2 text-sm',
+                          isLight ? 'bg-white text-gray-900' : 'bg-slate-700 text-gray-100',
+                        )}>
+                        <span>📎</span>
+                        <span className="truncate">{(a as Extract<Attachment, { kind: 'file' }>).name}</span>
+                        <span className="opacity-60">
+                          ({Math.ceil((a as Extract<Attachment, { kind: 'file' }>).size / 1024)} KB)
+                        </span>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => removeAttachment(a.id)}
+                      className="absolute right-0 top-0 m-1 hidden rounded bg-black/60 px-1 py-0.5 text-xs text-white group-hover:block"
+                      aria-label={t.removeAttachment}>
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
 
-          <div className="relative">
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={onKeyDown}
-              rows={1}
-              placeholder={t.placeholder}
-              className={cn(
-                'max-h-40 min-h-[40px] w-full resize-none rounded-md border px-3 py-2 pr-12 text-sm outline-none',
-                isLight
-                  ? 'border-slate-300 bg-white text-gray-900 focus:border-violet-500 focus:ring-1 focus:ring-violet-500'
-                  : 'border-slate-600 bg-slate-700 text-gray-100 focus:border-violet-400 focus:ring-1 focus:ring-violet-400',
-              )}
-            />
-            <button
-              onClick={handleSend}
-              disabled={!canSend}
-              className={cn(
-                'group absolute bottom-2 right-2 inline-flex h-8 w-8 items-center justify-center rounded-md text-sm shadow-sm transition-colors',
-                canSend ? 'bg-violet-600 text-white hover:bg-violet-700' : 'bg-gray-400 text-white opacity-60',
-              )}
-              title={t.send}
-              aria-label={t.send}>
-              <svg
-                aria-hidden="true"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round">
-                <path d="M22 2L11 13" />
-                <path d="M22 2l-7 20-4-9-9-4 20-7z" />
-              </svg>
-              <span
+            <div className="relative">
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={onKeyDown}
+                rows={1}
+                placeholder={t.placeholder}
                 className={cn(
-                  'pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity',
-                  isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
-                  'group-hover:opacity-100 group-focus-visible:opacity-100',
-                )}>
-                {t.send}
-              </span>
-            </button>
+                  'max-h-40 min-h-[40px] w-full resize-none rounded-md border px-3 py-2 pr-12 text-sm outline-none',
+                  isLight
+                    ? 'border-slate-300 bg-white text-gray-900 focus:border-violet-500 focus:ring-1 focus:ring-violet-500'
+                    : 'border-slate-600 bg-slate-700 text-gray-100 focus:border-violet-400 focus:ring-1 focus:ring-violet-400',
+                )}
+              />
+              <button
+                onClick={handleSend}
+                disabled={!canSend}
+                className={cn(
+                  'group absolute bottom-2 right-2 inline-flex h-8 w-8 items-center justify-center rounded-md text-sm shadow-sm transition-colors',
+                  canSend ? 'bg-violet-600 text-white hover:bg-violet-700' : 'bg-gray-400 text-white opacity-60',
+                )}
+                title={t.send}
+                aria-label={t.send}>
+                <svg
+                  aria-hidden="true"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round">
+                  <path d="M22 2L11 13" />
+                  <path d="M22 2l-7 20-4-9-9-4 20-7z" />
+                </svg>
+                <span
+                  className={cn(
+                    'pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity',
+                    isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
+                    'group-hover:opacity-100 group-focus-visible:opacity-100',
+                  )}>
+                  {t.send}
+                </span>
+              </button>
+            </div>
+            <div className="mt-1 text-xs opacity-70">{t.uiNote}</div>
           </div>
-          <div className="mt-1 text-xs opacity-70">{t.uiNote}</div>
-        </div>
+        )}
       </div>
+
+      {/* History bottom sheet */}
+      {historySheetOpen && (
+        <div className="fixed inset-0 z-30" role="dialog" aria-modal="true">
+          <div
+            className="absolute inset-0 bg-black/40"
+            role="button"
+            tabIndex={0}
+            aria-label="Close overlay"
+            onClick={() => setHistorySheetOpen(false)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setHistorySheetOpen(false);
+              }
+            }}
+          />
+          <div
+            className={cn(
+              'absolute bottom-0 left-0 right-0 max-h-[70%] overflow-hidden rounded-t-xl border-t shadow-xl',
+              isLight ? 'border-slate-200 bg-white text-gray-900' : 'border-slate-700 bg-slate-800 text-gray-100',
+            )}>
+            <div
+              className={cn(
+                'flex items-center justify-between border-b px-4 py-2',
+                isLight ? 'border-slate-200' : 'border-slate-700',
+              )}>
+              <div className="font-semibold">{t.history}</div>
+              <button
+                onClick={() => setHistorySheetOpen(false)}
+                className={cn('rounded px-2 py-1 text-sm', isLight ? 'hover:bg-slate-100' : 'hover:bg-slate-700')}
+                aria-label="Close">
+                ✕
+              </button>
+            </div>
+            <div className="max-h-[60vh] overflow-y-auto px-2 py-2">
+              {sortedThreads.length === 0 ? (
+                <div className="px-3 py-2 opacity-60">{t.noChats}</div>
+              ) : (
+                sortedThreads.map(th => (
+                  <button
+                    key={th.id}
+                    onClick={() => {
+                      activateThread(th.id);
+                      setHistorySheetOpen(false);
+                    }}
+                    className={cn(
+                      'flex w-full items-start gap-2 px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-700',
+                      activeId === th.id ? 'font-semibold' : undefined,
+                    )}>
+                    <div className="flex-1 truncate">
+                      <div className="truncate">{th.title || (uiLocale === 'ru' ? 'Без названия' : 'Untitled')}</div>
+                    </div>
+                    <div className="ml-2 whitespace-nowrap text-xs opacity-70">
+                      {new Date(th.updatedAt).toLocaleString()}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

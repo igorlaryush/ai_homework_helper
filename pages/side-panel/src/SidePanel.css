@@ -4,9 +4,9 @@
   bottom: 0;
   left: 0;
   right: 0;
-  text-align: center;
+  text-align: left;
   height: 100%;
-  padding: 1rem;
+  padding: 0;
 }
 
 .App-logo {
