@@ -21,6 +21,9 @@ const UI_I18N = {
     lang_en: 'English (English)',
     lang_ru: 'Russian (Русский)',
     history: 'History',
+    delete: 'Delete',
+    deleteChat: 'Delete chat',
+    confirmDeleteChat: 'Delete this chat?',
     noChats: 'No chats yet',
     send: 'Send',
     webAccess: 'Web Access',
@@ -83,6 +86,9 @@ const UI_I18N = {
     lang_en: 'English (English)',
     lang_ru: 'Russian (Русский)',
     history: 'История',
+    delete: 'Удалить',
+    deleteChat: 'Удалить чат',
+    confirmDeleteChat: 'Удалить этот чат?',
     noChats: 'Чатов пока нет',
     send: 'Отправить',
     webAccess: 'Доступ к вебу',
@@ -133,9 +139,17 @@ const UI_I18N = {
 } as const;
 
 type ChatMessage =
-  | { id: string; role: 'user' | 'assistant'; type: 'text'; content: string }
-  | { id: string; role: 'user' | 'assistant'; type: 'image'; dataUrl: string }
-  | { id: string; role: 'user' | 'assistant'; type: 'file'; name: string; size: number; mime: string };
+  | { id: string; role: 'user' | 'assistant'; type: 'text'; content: string; batchId?: string }
+  | { id: string; role: 'user' | 'assistant'; type: 'image'; dataUrl: string; batchId?: string }
+  | {
+      id: string;
+      role: 'user' | 'assistant';
+      type: 'file';
+      name: string;
+      size: number;
+      mime: string;
+      batchId?: string;
+    };
 
 type ChatThread = {
   id: string;
@@ -365,7 +379,9 @@ const SidePanel = () => {
     }
 
     if (out.length > 0) {
-      setMessages(prev => [...prev, ...out]);
+      const batchId = out.length > 1 ? `batch-${Date.now()}` : undefined;
+      const withBatch = batchId ? out.map(m => ({ ...m, batchId })) : out;
+      setMessages(prev => [...prev, ...withBatch]);
       upsertActiveThread(thread => ({
         ...thread,
         title:
@@ -375,7 +391,7 @@ const SidePanel = () => {
               ? userText.slice(0, 40)
               : thread.title,
         updatedAt: Date.now(),
-        messages: [...thread.messages, ...out],
+        messages: [...thread.messages, ...withBatch],
       }));
     }
 
@@ -663,6 +679,109 @@ const SidePanel = () => {
 
   const removeAttachment = useCallback((id: string) => setAttachments(prev => prev.filter(a => a.id !== id)), []);
 
+  // Delete single message
+  const deleteMessage = useCallback(
+    (id: string) => {
+      setMessages(prev => prev.filter(m => m.id !== id));
+      upsertActiveThread(thread => ({
+        ...thread,
+        updatedAt: Date.now(),
+        messages: thread.messages.filter(m => m.id !== id),
+      }));
+    },
+    [upsertActiveThread],
+  );
+
+  // Delete grouped messages by batchId
+  const deleteMessageGroup = useCallback(
+    (batchId: string) => {
+      setMessages(prev => prev.filter(m => m.batchId !== batchId));
+      upsertActiveThread(thread => ({
+        ...thread,
+        updatedAt: Date.now(),
+        messages: thread.messages.filter(m => m.batchId !== batchId),
+      }));
+    },
+    [upsertActiveThread],
+  );
+
+  // Regenerate assistant text message (UI demo behavior)
+  const regenerateAssistantMessage = useCallback(
+    (id: string) => {
+      const newContent = uiLocale === 'ru' ? 'Обновлённый ответ (UI демо).' : 'Regenerated answer (UI demo).';
+      setMessages(prev =>
+        prev.map(m => (m.id === id && m.role === 'assistant' && m.type === 'text' ? { ...m, content: newContent } : m)),
+      );
+      upsertActiveThread(thread => ({
+        ...thread,
+        updatedAt: Date.now(),
+        messages: thread.messages.map(m =>
+          m.id === id && m.role === 'assistant' && m.type === 'text' ? { ...m, content: newContent } : m,
+        ),
+      }));
+    },
+    [uiLocale, upsertActiveThread],
+  );
+
+  // Delete thread with confirmation
+  const deleteThread = useCallback(
+    (id: string) => {
+      const ok = window.confirm(uiLocale === 'ru' ? t.confirmDeleteChat : t.confirmDeleteChat);
+      if (!ok) return;
+      setThreads(prev => prev.filter(th => th.id !== id));
+      if (activeId === id) {
+        // Switch to another thread or create new
+        const remaining = threads.filter(th => th.id !== id);
+        if (remaining.length > 0) {
+          const nextId = remaining[0].id;
+          setActiveId(nextId);
+          const next = remaining.find(th => th.id === nextId)!;
+          setMessages(next.messages);
+        } else {
+          const nid = `chat-${Date.now()}`;
+          const thread: ChatThread = {
+            id: nid,
+            title: uiLocale === 'ru' ? 'Новый чат' : 'New chat',
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            messages: [initialAssistant],
+          };
+          setThreads([thread]);
+          setActiveId(nid);
+          setMessages(thread.messages);
+        }
+      }
+    },
+    [activeId, threads, uiLocale, t],
+  );
+
+  // Build render blocks (group consecutive messages by batchId)
+  const renderBlocks = useMemo(() => {
+    const blocks: Array<
+      | { kind: 'single'; item: ChatMessage }
+      | { kind: 'group'; batchId: string; role: 'user' | 'assistant'; items: ChatMessage[] }
+    > = [];
+    for (let i = 0; i < messages.length; ) {
+      const m = messages[i];
+      if (m.batchId) {
+        const bid = m.batchId;
+        const role = m.role;
+        const items: ChatMessage[] = [];
+        let j = i;
+        while (j < messages.length && messages[j].batchId === bid) {
+          items.push(messages[j]);
+          j++;
+        }
+        blocks.push({ kind: 'group', batchId: bid, role, items });
+        i = j;
+      } else {
+        blocks.push({ kind: 'single', item: m });
+        i += 1;
+      }
+    }
+    return blocks;
+  }, [messages]);
+
   // Switch thread
   const activateThread = useCallback(
     (id: string) => {
@@ -923,43 +1042,202 @@ const SidePanel = () => {
             )}>
             {mode === 'ask' ? (
               <div className="flex flex-col gap-3">
-                {messages.map(m => (
-                  <div key={m.id} className={cn('flex', m.role === 'user' ? 'justify-end' : 'justify-start')}>
-                    {m.type === 'text' ? (
-                      <div
-                        className={cn(
-                          'max-w-[80%] whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-left shadow-sm',
-                          m.role === 'user'
-                            ? 'bg-violet-600 text-white'
-                            : isLight
-                              ? 'bg-white text-gray-900 ring-1 ring-black/5'
-                              : 'bg-slate-700 text-gray-100 ring-1 ring-white/10',
-                        )}>
-                        {m.content}
-                      </div>
-                    ) : m.type === 'image' ? (
-                      <div
-                        className={cn(
-                          'max-w-[80%] overflow-hidden rounded-2xl shadow-sm ring-1',
-                          isLight ? 'ring-black/5' : 'ring-white/10',
-                        )}>
-                        <img src={m.dataUrl} alt="screenshot" className="block max-w-full" />
-                      </div>
-                    ) : (
-                      <div
-                        className={cn(
-                          'max-w-[80%] rounded-2xl shadow-sm ring-1',
-                          isLight ? 'bg-white text-gray-900 ring-black/5' : 'bg-slate-700 text-gray-100 ring-white/10',
-                        )}>
-                        <div className="flex items-center gap-2 px-3 py-2 text-sm">
-                          <span>📎</span>
-                          <span className="font-medium">{m.name}</span>
-                          <span className="opacity-60">({Math.ceil(m.size / 1024)} KB)</span>
+                {renderBlocks.map(block => {
+                  if (block.kind === 'single') {
+                    const m = block.item;
+                    return (
+                      <div key={m.id} className="group">
+                        <div className={cn('flex', m.role === 'user' ? 'justify-end' : 'justify-start')}>
+                          {m.type === 'text' ? (
+                            <div
+                              className={cn(
+                                'max-w-[80%] whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-left shadow-sm',
+                                m.role === 'user'
+                                  ? 'bg-violet-600 text-white'
+                                  : isLight
+                                    ? 'bg-white text-gray-900 ring-1 ring-black/5'
+                                    : 'bg-slate-700 text-gray-100 ring-1 ring-white/10',
+                              )}>
+                              {m.content}
+                            </div>
+                          ) : m.type === 'image' ? (
+                            <div
+                              className={cn(
+                                'max-w-[80%] overflow-hidden rounded-2xl shadow-sm ring-1',
+                                isLight ? 'ring-black/5' : 'ring-white/10',
+                              )}>
+                              <img src={m.dataUrl} alt="screenshot" className="block max-w-full" />
+                            </div>
+                          ) : (
+                            <div
+                              className={cn(
+                                'max-w-[80%] rounded-2xl shadow-sm ring-1',
+                                isLight
+                                  ? 'bg-white text-gray-900 ring-black/5'
+                                  : 'bg-slate-700 text-gray-100 ring-white/10',
+                              )}>
+                              <div className="flex items-center gap-2 px-3 py-2 text-sm">
+                                <span>📎</span>
+                                <span className="font-medium">{m.name}</span>
+                                <span className="opacity-60">({Math.ceil(m.size / 1024)} KB)</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <div
+                          className={cn(
+                            'mt-1 flex items-center gap-2 text-xs',
+                            m.role === 'user' ? 'justify-end' : 'justify-start',
+                          )}>
+                          {m.role === 'assistant' && m.type === 'text' && (
+                            <>
+                              <button
+                                onClick={() => regenerateAssistantMessage(m.id)}
+                                className={cn(
+                                  'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
+                                  isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
+                                )}
+                                title={t.write_regenerate}
+                                aria-label={t.write_regenerate}>
+                                ↻
+                              </button>
+                              <button
+                                onClick={() => copyText(m.content)}
+                                className={cn(
+                                  'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
+                                  isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
+                                )}
+                                title={t.write_copy}
+                                aria-label={t.write_copy}>
+                                <svg
+                                  aria-hidden="true"
+                                  width="16"
+                                  height="16"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round">
+                                  <rect x="9" y="9" width="13" height="13" rx="2" />
+                                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                </svg>
+                              </button>
+                            </>
+                          )}
+                          <button
+                            onClick={() => deleteMessage(m.id)}
+                            className={cn(
+                              'rounded-md p-1 text-gray-400 transition-colors',
+                              isLight
+                                ? 'hover:bg-slate-200 hover:text-red-600'
+                                : 'hover:bg-slate-700 hover:text-red-600',
+                            )}
+                            title={t.delete}
+                            aria-label={t.delete}>
+                            <svg
+                              aria-hidden="true"
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round">
+                              <path d="M3 6h18" />
+                              <path d="M8 6V4h8v2" />
+                              <path d="M19 6l-1 14H6L5 6" />
+                              <path d="M10 11v6" />
+                              <path d="M14 11v6" />
+                            </svg>
+                          </button>
                         </div>
                       </div>
-                    )}
-                  </div>
-                ))}
+                    );
+                  }
+                  // group
+                  const role = block.role;
+                  return (
+                    <div key={`g-${block.batchId}`} className="group">
+                      <div className={cn('flex', role === 'user' ? 'justify-end' : 'justify-start')}>
+                        <div className="flex max-w-[80%] flex-col gap-2">
+                          {block.items.map(it =>
+                            it.type === 'text' ? (
+                              <div
+                                key={it.id}
+                                className={cn(
+                                  'whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-left shadow-sm',
+                                  role === 'user'
+                                    ? 'bg-violet-600 text-white'
+                                    : isLight
+                                      ? 'bg-white text-gray-900 ring-1 ring-black/5'
+                                      : 'bg-slate-700 text-gray-100 ring-1 ring-white/10',
+                                )}>
+                                {it.content}
+                              </div>
+                            ) : it.type === 'image' ? (
+                              <div
+                                key={it.id}
+                                className={cn(
+                                  'overflow-hidden rounded-2xl shadow-sm ring-1',
+                                  isLight ? 'bg-white ring-black/5' : 'bg-slate-700 ring-white/10',
+                                )}>
+                                <img src={it.dataUrl} alt="screenshot" className="block max-w-full" />
+                              </div>
+                            ) : (
+                              <div
+                                key={it.id}
+                                className={cn(
+                                  'rounded-2xl shadow-sm ring-1',
+                                  isLight
+                                    ? 'bg-white text-gray-900 ring-black/5'
+                                    : 'bg-slate-700 text-gray-100 ring-white/10',
+                                )}>
+                                <div className="flex items-center gap-2 px-3 py-2 text-sm">
+                                  <span>📎</span>
+                                  <span className="font-medium">{it.name}</span>
+                                  <span className="opacity-60">({Math.ceil(it.size / 1024)} KB)</span>
+                                </div>
+                              </div>
+                            ),
+                          )}
+                        </div>
+                      </div>
+                      <div
+                        className={cn(
+                          'mt-1 flex items-center gap-2 text-xs',
+                          role === 'user' ? 'justify-end' : 'justify-start',
+                        )}>
+                        <button
+                          onClick={() => deleteMessageGroup(block.batchId)}
+                          className={cn(
+                            'rounded-md p-1 text-gray-400 transition-colors',
+                            isLight ? 'hover:bg-slate-200 hover:text-red-600' : 'hover:bg-slate-700 hover:text-red-600',
+                          )}
+                          title={t.delete}
+                          aria-label={t.delete}>
+                          <svg
+                            aria-hidden="true"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round">
+                            <path d="M3 6h18" />
+                            <path d="M8 6V4h8v2" />
+                            <path d="M19 6l-1 14H6L5 6" />
+                            <path d="M10 11v6" />
+                            <path d="M14 11v6" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             ) : mode === 'read' ? (
               <div className="mx-auto w-full max-w-xl">
@@ -1047,12 +1325,29 @@ const SidePanel = () => {
                           <button
                             onClick={() => deletePdf(item.id)}
                             className={cn(
-                              'rounded-md px-3 py-1 text-sm',
-                              isLight ? 'bg-slate-200 hover:bg-slate-300' : 'bg-slate-700 hover:bg-slate-600',
+                              'rounded-md p-2 text-gray-400 transition-colors',
+                              isLight
+                                ? 'hover:bg-slate-200 hover:text-red-600'
+                                : 'hover:bg-slate-700 hover:text-red-600',
                             )}
                             aria-label={t.read_delete}
                             title={t.read_delete}>
-                            ✕
+                            <svg
+                              aria-hidden="true"
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round">
+                              <path d="M3 6h18" />
+                              <path d="M8 6V4h8v2" />
+                              <path d="M19 6l-1 14H6L5 6" />
+                              <path d="M10 11v6" />
+                              <path d="M14 11v6" />
+                            </svg>
                           </button>
                         </div>
                       </div>
@@ -1250,7 +1545,19 @@ const SidePanel = () => {
                           )}
                           aria-label={t.write_copy}
                           title={t.write_copy}>
-                          📋
+                          <svg
+                            aria-hidden="true"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round">
+                            <rect x="9" y="9" width="13" height="13" rx="2" />
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                          </svg>
                         </button>
                       </div>
                     </div>
@@ -1326,7 +1633,19 @@ const SidePanel = () => {
                           )}
                           aria-label={t.write_copy}
                           title={t.write_copy}>
-                          📋
+                          <svg
+                            aria-hidden="true"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round">
+                            <rect x="9" y="9" width="13" height="13" rx="2" />
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                          </svg>
                         </button>
                       </div>
                     </div>
@@ -1383,7 +1702,19 @@ const SidePanel = () => {
                           )}
                           aria-label={t.write_copy}
                           title={t.write_copy}>
-                          📋
+                          <svg
+                            aria-hidden="true"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round">
+                            <rect x="9" y="9" width="13" height="13" rx="2" />
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                          </svg>
                         </button>
                       </div>
                     </div>
@@ -1440,7 +1771,19 @@ const SidePanel = () => {
                           )}
                           aria-label={t.write_copy}
                           title={t.write_copy}>
-                          📋
+                          <svg
+                            aria-hidden="true"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round">
+                            <rect x="9" y="9" width="13" height="13" rx="2" />
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                          </svg>
                         </button>
                       </div>
                     </div>
@@ -1949,23 +2292,51 @@ const SidePanel = () => {
                 <div className="px-3 py-2 opacity-60">{t.noChats}</div>
               ) : (
                 sortedThreads.map(th => (
-                  <button
+                  <div
                     key={th.id}
-                    onClick={() => {
-                      activateThread(th.id);
-                      setHistorySheetOpen(false);
-                    }}
                     className={cn(
-                      'flex w-full items-start gap-2 px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-700',
+                      'flex w-full items-center gap-2 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700',
                       activeId === th.id ? 'font-semibold' : undefined,
                     )}>
-                    <div className="flex-1 truncate">
-                      <div className="truncate">{th.title || (uiLocale === 'ru' ? 'Без названия' : 'Untitled')}</div>
-                    </div>
-                    <div className="ml-2 whitespace-nowrap text-xs opacity-70">
-                      {new Date(th.updatedAt).toLocaleString()}
-                    </div>
-                  </button>
+                    <button
+                      onClick={() => {
+                        activateThread(th.id);
+                        setHistorySheetOpen(false);
+                      }}
+                      className="flex min-w-0 flex-1 items-start gap-2 text-left">
+                      <div className="flex-1 truncate">
+                        <div className="truncate">{th.title || (uiLocale === 'ru' ? 'Без названия' : 'Untitled')}</div>
+                      </div>
+                      <div className="ml-2 whitespace-nowrap text-xs opacity-70">
+                        {new Date(th.updatedAt).toLocaleString()}
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => deleteThread(th.id)}
+                      className={cn(
+                        'rounded-md p-1 text-gray-400 transition-colors',
+                        isLight ? 'hover:bg-slate-200 hover:text-red-600' : 'hover:bg-slate-700 hover:text-red-600',
+                      )}
+                      title={t.deleteChat}
+                      aria-label={t.deleteChat}>
+                      <svg
+                        aria-hidden="true"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round">
+                        <path d="M3 6h18" />
+                        <path d="M8 6V4h8v2" />
+                        <path d="M19 6l-1 14H6L5 6" />
+                        <path d="M10 11v6" />
+                        <path d="M14 11v6" />
+                      </svg>
+                    </button>
+                  </div>
                 ))
               )}
             </div>
