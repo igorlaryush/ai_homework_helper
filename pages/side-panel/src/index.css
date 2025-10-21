@@ -1,1 +1,13 @@
 @import '@extension/ui/global.css';
+
+html, body, #app-container {
+  height: 100%;
+}
+
+/* Prevent rubber-band overscroll and page scroll; avoid revealing background */
+body {
+  margin: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background-color: transparent;
+}
