@@ -230,6 +230,79 @@ const extractCitationsFromOutput = (output: unknown): { title?: string; url: str
   return urls;
 };
 
+// Streaming utilities for OpenAI Responses API (SSE)
+type StreamCallbacks = {
+  onDelta: (chunk: string) => void;
+  onDone: (final: ResponsesResult | null) => void;
+  onError: (error: unknown) => void;
+};
+
+const streamResponsesApi = async (
+  { apiKey, body }: { apiKey: string; body: Record<string, unknown> },
+  { onDelta, onDone, onError }: StreamCallbacks,
+): Promise<void> => {
+  try {
+    const res = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+        'OpenAI-Beta': 'responses-2024-10-22',
+        Accept: 'text/event-stream',
+      },
+      body: JSON.stringify({ ...body, stream: true }),
+    });
+    if (!res.body) throw new Error('No response body');
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+    let finalResult: ResponsesResult | null = null;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let idx: number;
+      while ((idx = buffer.indexOf('\n\n')) !== -1) {
+        const block = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 2);
+        if (block.length === 0) continue;
+        // Parse SSE block
+        const lines = block.split('\n');
+        let eventName = '';
+        const dataLines: string[] = [];
+        for (const line of lines) {
+          if (line.startsWith('event:')) eventName = line.slice(6).trim();
+          else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+        }
+        const dataStr = dataLines.join('\n');
+        if (!dataStr) continue;
+        try {
+          const data = JSON.parse(dataStr) as unknown;
+          if (eventName.includes('output_text.delta')) {
+            const piece =
+              isRecord(data) && typeof (data as Record<string, unknown>).delta === 'string'
+                ? String((data as Record<string, unknown>).delta)
+                : '';
+            if (piece) onDelta(piece);
+          } else if (eventName === 'response.completed') {
+            // Final full response object
+            if (isRecord(data) && isRecord((data as Record<string, unknown>).response)) {
+              finalResult = (data as { response: ResponsesResult }).response;
+            }
+          } else if (eventName === 'error') {
+            onError(data);
+          }
+        } catch {
+          // ignore bad JSON
+        }
+      }
+    }
+    onDone(finalResult);
+  } catch (err) {
+    onError(err);
+  }
+};
+
 const cropImageDataUrl = async (
   sourceDataUrl: string,
   bounds: { x: number; y: number; width: number; height: number; dpr: number },
@@ -502,67 +575,78 @@ const SidePanel = () => {
 
     lastRequestRef.current = { model, inputPayload };
 
-    fetch('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        model,
-        input: inputPayload,
-        ...(webAccessEnabled ? { tools: [{ type: 'web_search' }], tool_choice: 'auto' as const } : {}),
-      }),
-    })
-      .then(r => r.json())
-      .then((json: ResponsesResult) => {
-        if (typeof json?.id === 'string') lastResponseIdRef.current = json.id as string;
-        let text = extractTextFromOutput(json?.output);
-        if (!text && typeof json?.output_text === 'string') text = json.output_text;
-        const citations = (() => {
-          try {
-            return extractCitationsFromOutput(json?.output);
-          } catch {
-            return [];
-          }
-        })();
+    // Streaming placeholder message
+    const streamId = `assistant-${Date.now() + 1}`;
+    setMessages(prev => [...prev, { id: streamId, role: 'assistant', type: 'text', content: '' }]);
+    upsertActiveThread(thread => ({
+      ...thread,
+      updatedAt: Date.now(),
+      messages: [...thread.messages, { id: streamId, role: 'assistant', type: 'text', content: '' }],
+    }));
 
-        const assistantMsg: ChatMessage = {
-          id: `assistant-${Date.now() + 1}`,
-          role: 'assistant',
-          type: 'text',
-          content:
-            (text || (uiLocale === 'ru' ? 'Нет текста ответа.' : 'No text in response.')) +
-            (citations.length > 0
-              ? '\n\n' +
-                (uiLocale === 'ru' ? 'Источники:' : 'Sources:') +
-                '\n' +
-                citations
-                  .slice(0, 8)
-                  .map(c => `- ${c.title ? `[${c.title}](${c.url})` : c.url}`)
-                  .join('\n')
-              : ''),
-        };
-        setMessages(prev => [...prev, assistantMsg]);
-        upsertActiveThread(thread => ({
-          ...thread,
-          updatedAt: Date.now(),
-          messages: [...thread.messages, assistantMsg],
-        }));
-        queueMicrotask(() => inputRef.current?.focus());
-      })
-      .catch(() => {
-        const assistantMsg: ChatMessage = {
-          id: `assistant-${Date.now() + 1}`,
-          role: 'assistant',
-          type: 'text',
-          content: uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.',
-        };
-        setMessages(prev => [...prev, assistantMsg]);
-        upsertActiveThread(thread => ({
-          ...thread,
-          updatedAt: Date.now(),
-          messages: [...thread.messages, assistantMsg],
-        }));
-        queueMicrotask(() => inputRef.current?.focus());
-      });
+    void streamResponsesApi(
+      {
+        apiKey: key,
+        body: {
+          model,
+          input: inputPayload,
+          text: { format: { type: 'text' } },
+          ...(webAccessEnabled ? { tools: [{ type: 'web_search' }], tool_choice: 'auto' as const } : {}),
+        },
+      },
+      {
+        onDelta: chunk => {
+          setMessages(prev =>
+            prev.map(m => (m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + chunk } : m)),
+          );
+          upsertActiveThread(thread => ({
+            ...thread,
+            messages: thread.messages.map(m =>
+              m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + chunk } : m,
+            ),
+          }));
+        },
+        onDone: final => {
+          if (final && typeof final.id === 'string') lastResponseIdRef.current = final.id;
+          const citations = final ? extractCitationsFromOutput(final.output) : [];
+          if (citations.length > 0) {
+            const suffix =
+              '\n\n' +
+              (uiLocale === 'ru' ? 'Источники:' : 'Sources:') +
+              '\n' +
+              citations
+                .slice(0, 8)
+                .map(c => `- ${c.title ? `[${c.title}](${c.url})` : c.url}`)
+                .join('\n');
+            setMessages(prev =>
+              prev.map(m =>
+                m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + suffix } : m,
+              ),
+            );
+            upsertActiveThread(thread => ({
+              ...thread,
+              updatedAt: Date.now(),
+              messages: thread.messages.map(m =>
+                m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + suffix } : m,
+              ),
+            }));
+          } else {
+            upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
+          }
+          queueMicrotask(() => inputRef.current?.focus());
+        },
+        onError: () => {
+          const content = uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.';
+          setMessages(prev => prev.map(m => (m.id === streamId && m.type === 'text' ? { ...m, content } : m)));
+          upsertActiveThread(thread => ({
+            ...thread,
+            updatedAt: Date.now(),
+            messages: thread.messages.map(m => (m.id === streamId && m.type === 'text' ? { ...m, content } : m)),
+          }));
+          queueMicrotask(() => inputRef.current?.focus());
+        },
+      },
+    );
   }, [
     canSend,
     input,
