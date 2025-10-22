@@ -403,6 +403,26 @@ const SidePanel = () => {
   const t = UI_I18N[uiLocale];
   const headerTitle = mode === 'ask' ? t.title : mode === 'read' ? t.nav_read : t.nav_write;
 
+  // Avatars for assistant and user
+  const BotAvatar = () => (
+    <div
+      className={cn(
+        'grid h-8 w-8 shrink-0 place-items-center rounded-full',
+        isLight ? 'bg-violet-100 text-violet-700' : 'bg-slate-700 text-violet-300',
+      )}>
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2a2 2 0 0 0-2 2v1H7a3 3 0 0 0-3 3v6a5 5 0 0 0 5 5h6a5 5 0 0 0 5-5V8a3 3 0 0 0-3-3h-3V4a2 2 0 0 0-2-2zm-4 9a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm8 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zM8 16h8a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2z" />
+      </svg>
+    </div>
+  );
+  const UserAvatar = () => (
+    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-violet-600 text-white">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-4.418 0-8 2.239-8 5v1h16v-1c0-2.761-3.582-5-8-5z" />
+      </svg>
+    </div>
+  );
+
   // Load persisted locale, chats and toggles
   useEffect(() => {
     chrome.storage?.local
@@ -1644,11 +1664,13 @@ const SidePanel = () => {
                     const m = block.item;
                     return (
                       <div key={m.id} className="group">
-                        <div className={cn('flex', m.role === 'user' ? 'justify-end' : 'justify-start')}>
+                        <div
+                          className={cn('flex items-start gap-2', m.role === 'user' ? 'justify-end' : 'justify-start')}>
+                          {m.role === 'assistant' && <BotAvatar />}
                           {m.type === 'text' ? (
                             <div
                               className={cn(
-                                'max-w-[80%] whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-left shadow-sm',
+                                'max-w-[90%] whitespace-pre-wrap break-words rounded-2xl px-4 py-3 text-left shadow-sm',
                                 m.role === 'user'
                                   ? 'bg-violet-600 text-white'
                                   : isLight
@@ -1660,7 +1682,7 @@ const SidePanel = () => {
                           ) : m.type === 'image' ? (
                             <div
                               className={cn(
-                                'max-w-[80%] overflow-hidden rounded-2xl shadow-sm ring-1',
+                                'max-w-[90%] overflow-hidden rounded-2xl shadow-sm ring-1',
                                 isLight ? 'ring-black/5' : 'ring-white/10',
                               )}>
                               <img src={m.dataUrl} alt="screenshot" className="block max-w-full" />
@@ -1668,7 +1690,7 @@ const SidePanel = () => {
                           ) : (
                             <div
                               className={cn(
-                                'max-w-[80%] rounded-2xl shadow-sm ring-1',
+                                'max-w-[90%] rounded-2xl shadow-sm ring-1',
                                 isLight
                                   ? 'bg-white text-gray-900 ring-black/5'
                                   : 'bg-slate-700 text-gray-100 ring-white/10',
@@ -1680,6 +1702,7 @@ const SidePanel = () => {
                               </div>
                             </div>
                           )}
+                          {m.role === 'user' && <UserAvatar />}
                         </div>
                         <div
                           className={cn(
@@ -1757,14 +1780,15 @@ const SidePanel = () => {
                   const role = block.role;
                   return (
                     <div key={`g-${block.batchId}`} className="group">
-                      <div className={cn('flex', role === 'user' ? 'justify-end' : 'justify-start')}>
-                        <div className="flex max-w-[80%] flex-col gap-2">
+                      <div className={cn('flex items-start gap-2', role === 'user' ? 'justify-end' : 'justify-start')}>
+                        {role === 'assistant' && <BotAvatar />}
+                        <div className="flex max-w-[90%] flex-col gap-2">
                           {block.items.map(it =>
                             it.type === 'text' ? (
                               <div
                                 key={it.id}
                                 className={cn(
-                                  'whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-left shadow-sm',
+                                  'whitespace-pre-wrap break-words rounded-2xl px-4 py-3 text-left shadow-sm',
                                   role === 'user'
                                     ? 'bg-violet-600 text-white'
                                     : isLight
@@ -1800,6 +1824,7 @@ const SidePanel = () => {
                             ),
                           )}
                         </div>
+                        {role === 'user' && <UserAvatar />}
                       </div>
                       <div
                         className={cn(
