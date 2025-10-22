@@ -36,6 +36,12 @@ const UI_I18N = {
     nav_read: 'Read',
     nav_write: 'Write',
     comingSoon: 'Coming soon',
+    apiKey: 'API Key',
+    setApiKey: 'Set API Key',
+    enterApiKey: 'Enter OpenAI API key (starts with sk-)',
+    save: 'Save',
+    clear: 'Clear',
+    missingKey: 'API key is not set',
     read_drop_title: 'Click or drag files here to upload.',
     read_drop_sub1: 'Supported file types: PDF',
     read_drop_sub2: 'Maximum file size: 10MB.',
@@ -101,6 +107,12 @@ const UI_I18N = {
     nav_read: 'Read',
     nav_write: 'Write',
     comingSoon: 'Скоро будет',
+    apiKey: 'Ключ API',
+    setApiKey: 'Указать ключ API',
+    enterApiKey: 'Введите ключ OpenAI (начинается с sk-)',
+    save: 'Сохранить',
+    clear: 'Очистить',
+    missingKey: 'Ключ API не установлен',
     read_drop_title: 'Нажмите или перетащите файлы сюда для загрузки.',
     read_drop_sub1: 'Поддерживаемые форматы: PDF',
     read_drop_sub2: 'Максимальный размер: 10MB.',
@@ -175,6 +187,49 @@ type ReadFileItem = {
 const MAX_TEXTAREA_PX = 160; // Tailwind max-h-40
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
 
+// Minimal types for OpenAI Responses API parsing
+type ResponseAnnotation = { url?: string; title?: string };
+type ResponseContent = { text?: string; annotations?: ResponseAnnotation[] };
+type ResponseOutputItem = { type?: string; content?: ResponseContent[] };
+type ResponsesResult = { id?: string; output?: ResponseOutputItem[] };
+
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
+
+const extractTextFromOutput = (output: unknown): string => {
+  if (!Array.isArray(output)) return '';
+  for (let i = output.length - 1; i >= 0; i--) {
+    const item = output[i];
+    if (!isRecord(item)) continue;
+    const content = (item as ResponseOutputItem).content;
+    if (!Array.isArray(content)) continue;
+    const parts: string[] = [];
+    for (const c of content) {
+      if (!isRecord(c)) continue;
+      const text = (c as ResponseContent).text;
+      if (typeof text === 'string' && text.length > 0) parts.push(text);
+    }
+    if (parts.length > 0) return parts.join('\n\n');
+  }
+  return '';
+};
+
+const extractCitationsFromOutput = (output: unknown): { title?: string; url: string }[] => {
+  const urls: { title?: string; url: string }[] = [];
+  if (!Array.isArray(output)) return urls;
+  for (const item of output) {
+    if (!isRecord(item)) continue;
+    const content = (item as ResponseOutputItem).content;
+    if (!Array.isArray(content)) continue;
+    for (const c of content) {
+      if (!isRecord(c)) continue;
+      const anns = (c as ResponseContent).annotations;
+      if (!Array.isArray(anns)) continue;
+      for (const a of anns) if (a && typeof a.url === 'string') urls.push({ title: a.title, url: a.url });
+    }
+  }
+  return urls;
+};
+
 const cropImageDataUrl = async (
   sourceDataUrl: string,
   bounds: { x: number; y: number; width: number; height: number; dpr: number },
@@ -233,11 +288,16 @@ const SidePanel = () => {
   const [webAccessEnabled, setWebAccessEnabled] = useState<boolean>(false);
   const [modelPopoverOpen, setModelPopoverOpen] = useState<boolean>(false);
   const [llmModel, setLlmModel] = useState<'quick' | 'deep'>('quick');
+  const [apiKeyOpen, setApiKeyOpen] = useState<boolean>(false);
+  const [apiKeyInput, setApiKeyInput] = useState<string>('');
+  const [apiKeyMasked, setApiKeyMasked] = useState<string>('');
+  const lastRequestRef = useRef<{ model: string; inputPayload: unknown } | null>(null);
 
   const [uiLocale, setUiLocale] = useState<'en' | 'ru'>('en');
   const [langOpen, setLangOpen] = useState<boolean>(false);
   const [mode, setMode] = useState<'ask' | 'read' | 'write'>('ask');
   const [writeTab, setWriteTab] = useState<'compose' | 'revise' | 'grammar' | 'paraphrase'>('compose');
+  const lastResponseIdRef = useRef<string | null>(null);
 
   // Write mode state
   const [writeComposeInput, setWriteComposeInput] = useState<string>('');
@@ -285,6 +345,7 @@ const SidePanel = () => {
         STORAGE_KEYS.webAccess,
         STORAGE_KEYS.llmModel,
         STORAGE_KEYS.readRecent,
+        'openai_api_key',
       ])
       .then(store => {
         const v = store?.uiLocale as 'en' | 'ru' | undefined;
@@ -299,6 +360,12 @@ const SidePanel = () => {
 
         const loadedRead = (store?.[STORAGE_KEYS.readRecent] as ReadFileItem[] | undefined) ?? [];
         setReadFiles(loadedRead);
+
+        const key = (store?.openai_api_key as string | undefined) ?? '';
+        if (key) {
+          setApiKeyInput(key);
+          setApiKeyMasked(`${key.slice(0, 3)}••••${key.slice(-4)}`);
+        }
 
         const loadedThreads = (store?.[STORAGE_KEYS.threads] as ChatThread[] | undefined) ?? [];
         const loadedActive = (store?.[STORAGE_KEYS.activeId] as string | undefined) ?? '';
@@ -341,6 +408,10 @@ const SidePanel = () => {
   useEffect(() => {
     void chrome.storage?.local.set({ [STORAGE_KEYS.readRecent]: readFiles });
   }, [readFiles]);
+  useEffect(() => {
+    const toSave = apiKeyInput.trim();
+    if (toSave === '' || toSave.startsWith('sk-')) void chrome.storage?.local.set({ openai_api_key: toSave });
+  }, [apiKeyInput]);
 
   const canSend = useMemo(() => input.trim().length > 0 || attachments.length > 0, [input, attachments]);
 
@@ -395,23 +466,113 @@ const SidePanel = () => {
       }));
     }
 
+    // Prepare API request before clearing inputs
+    const key = apiKeyInput.trim();
+    const attachmentsAtSend = attachments;
+    const textForAI = input.trim() || (uiLocale === 'ru' ? 'Опиши вложения.' : 'Describe the attachments.');
+
     setInput('');
     setAttachments([]);
 
-    const assistantMsg: ChatMessage = {
-      id: `assistant-${Date.now() + 1}`,
-      role: 'assistant',
-      type: 'text',
-      content:
-        uiLocale === 'ru'
-          ? 'Сообщение принято (UI демо). Здесь будет ответ LLM.'
-          : 'Message received (UI demo). LLM response goes here.',
-    };
-    setMessages(prev => [...prev, assistantMsg]);
-    upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now(), messages: [...thread.messages, assistantMsg] }));
+    if (!key) {
+      const assistantMsg: ChatMessage = {
+        id: `assistant-${Date.now() + 1}`,
+        role: 'assistant',
+        type: 'text',
+        content: t.missingKey,
+      };
+      setMessages(prev => [...prev, assistantMsg]);
+      upsertActiveThread(thread => ({
+        ...thread,
+        updatedAt: Date.now(),
+        messages: [...thread.messages, assistantMsg],
+      }));
+      queueMicrotask(() => inputRef.current?.focus());
+      return;
+    }
 
-    queueMicrotask(() => inputRef.current?.focus());
-  }, [canSend, input, attachments, uiLocale, upsertActiveThread]);
+    const model = llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini';
+    const imageParts = attachmentsAtSend
+      .filter(a => a.kind === 'image')
+      .map(a => ({ type: 'input_image', image_url: (a as Extract<Attachment, { kind: 'image' }>).dataUrl }));
+    const inputPayload =
+      imageParts.length > 0
+        ? [{ role: 'user', content: [{ type: 'input_text', text: textForAI }, ...imageParts] }]
+        : textForAI;
+
+    lastRequestRef.current = { model, inputPayload };
+
+    fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        model,
+        input: inputPayload,
+        ...(webAccessEnabled ? { tools: [{ type: 'web_search' }], tool_choice: 'auto' as const } : {}),
+      }),
+    })
+      .then(r => r.json())
+      .then((json: ResponsesResult) => {
+        if (typeof json?.id === 'string') lastResponseIdRef.current = json.id as string;
+        const text = extractTextFromOutput(json?.output);
+        const citations = (() => {
+          try {
+            return extractCitationsFromOutput(json?.output);
+          } catch {
+            return [];
+          }
+        })();
+
+        const assistantMsg: ChatMessage = {
+          id: `assistant-${Date.now() + 1}`,
+          role: 'assistant',
+          type: 'text',
+          content:
+            (text || (uiLocale === 'ru' ? 'Нет текста ответа.' : 'No text in response.')) +
+            (citations.length > 0
+              ? '\n\n' +
+                (uiLocale === 'ru' ? 'Источники:' : 'Sources:') +
+                '\n' +
+                citations
+                  .slice(0, 8)
+                  .map(c => `- ${c.title ? `[${c.title}](${c.url})` : c.url}`)
+                  .join('\n')
+              : ''),
+        };
+        setMessages(prev => [...prev, assistantMsg]);
+        upsertActiveThread(thread => ({
+          ...thread,
+          updatedAt: Date.now(),
+          messages: [...thread.messages, assistantMsg],
+        }));
+        queueMicrotask(() => inputRef.current?.focus());
+      })
+      .catch(() => {
+        const assistantMsg: ChatMessage = {
+          id: `assistant-${Date.now() + 1}`,
+          role: 'assistant',
+          type: 'text',
+          content: uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.',
+        };
+        setMessages(prev => [...prev, assistantMsg]);
+        upsertActiveThread(thread => ({
+          ...thread,
+          updatedAt: Date.now(),
+          messages: [...thread.messages, assistantMsg],
+        }));
+        queueMicrotask(() => inputRef.current?.focus());
+      });
+  }, [
+    canSend,
+    input,
+    attachments,
+    uiLocale,
+    upsertActiveThread,
+    apiKeyInput,
+    llmModel,
+    t.missingKey,
+    webAccessEnabled,
+  ]);
 
   const onKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -705,22 +866,94 @@ const SidePanel = () => {
     [upsertActiveThread],
   );
 
-  // Regenerate assistant text message (UI demo behavior)
+  // Regenerate assistant text message via API
   const regenerateAssistantMessage = useCallback(
     (id: string) => {
-      const newContent = uiLocale === 'ru' ? 'Обновлённый ответ (UI демо).' : 'Regenerated answer (UI demo).';
-      setMessages(prev =>
-        prev.map(m => (m.id === id && m.role === 'assistant' && m.type === 'text' ? { ...m, content: newContent } : m)),
-      );
-      upsertActiveThread(thread => ({
-        ...thread,
-        updatedAt: Date.now(),
-        messages: thread.messages.map(m =>
-          m.id === id && m.role === 'assistant' && m.type === 'text' ? { ...m, content: newContent } : m,
-        ),
-      }));
+      const key = apiKeyInput.trim();
+      if (!key) {
+        const newContent = t.missingKey;
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === id && m.role === 'assistant' && m.type === 'text' ? { ...m, content: newContent } : m,
+          ),
+        );
+        upsertActiveThread(thread => ({
+          ...thread,
+          updatedAt: Date.now(),
+          messages: thread.messages.map(m =>
+            m.id === id && m.role === 'assistant' && m.type === 'text' ? { ...m, content: newContent } : m,
+          ),
+        }));
+        return;
+      }
+      const model =
+        (lastRequestRef.current?.model as string | undefined) ?? (llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini');
+      const inputPayload =
+        lastRequestRef.current?.inputPayload ??
+        (uiLocale === 'ru' ? 'Перегенерируй предыдущий ответ' : 'Regenerate previous answer');
+
+      fetch('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        body: JSON.stringify({
+          model,
+          input: inputPayload,
+          ...(webAccessEnabled ? { tools: [{ type: 'web_search' }], tool_choice: 'auto' as const } : {}),
+          ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
+        }),
+      })
+        .then(r => r.json())
+        .then((json: ResponsesResult) => {
+          if (typeof json?.id === 'string') lastResponseIdRef.current = json.id as string;
+          const text = extractTextFromOutput(json?.output);
+          const citations = (() => {
+            try {
+              return extractCitationsFromOutput(json?.output);
+            } catch {
+              return [];
+            }
+          })();
+          const newContent =
+            (text || (uiLocale === 'ru' ? 'Нет текста ответа.' : 'No text in response.')) +
+            (citations.length > 0
+              ? '\n\n' +
+                (uiLocale === 'ru' ? 'Источники:' : 'Sources:') +
+                '\n' +
+                citations
+                  .slice(0, 8)
+                  .map(c => `- ${c.title ? `[${c.title}](${c.url})` : c.url}`)
+                  .join('\n')
+              : '');
+          setMessages(prev =>
+            prev.map(m =>
+              m.id === id && m.role === 'assistant' && m.type === 'text' ? { ...m, content: newContent } : m,
+            ),
+          );
+          upsertActiveThread(thread => ({
+            ...thread,
+            updatedAt: Date.now(),
+            messages: thread.messages.map(m =>
+              m.id === id && m.role === 'assistant' && m.type === 'text' ? { ...m, content: newContent } : m,
+            ),
+          }));
+        })
+        .catch(() => {
+          const newContent = uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.';
+          setMessages(prev =>
+            prev.map(m =>
+              m.id === id && m.role === 'assistant' && m.type === 'text' ? { ...m, content: newContent } : m,
+            ),
+          );
+          upsertActiveThread(thread => ({
+            ...thread,
+            updatedAt: Date.now(),
+            messages: thread.messages.map(m =>
+              m.id === id && m.role === 'assistant' && m.type === 'text' ? { ...m, content: newContent } : m,
+            ),
+          }));
+        });
     },
-    [uiLocale, upsertActiveThread],
+    [apiKeyInput, llmModel, uiLocale, upsertActiveThread, t.missingKey, webAccessEnabled],
   );
 
   // Delete thread with confirmation
@@ -1027,7 +1260,99 @@ const SidePanel = () => {
               )}
             </div>
 
-            {/* History button removed from header */}
+            {/* API Key button */}
+            <div
+              className="relative"
+              onBlur={e => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) setApiKeyOpen(false);
+              }}>
+              <button
+                onClick={() => setApiKeyOpen(v => !v)}
+                title={t.apiKey}
+                aria-label={t.apiKey}
+                aria-haspopup="dialog"
+                aria-expanded={apiKeyOpen}
+                className={cn(
+                  'group relative inline-flex h-8 w-8 items-center justify-center rounded-md border text-base transition-colors',
+                  isLight
+                    ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
+                    : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
+                )}>
+                <svg
+                  aria-hidden="true"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round">
+                  <path d="M21 10v6a2 2 0 0 1-2 2H7l-4 4V6a2 2 0 0 1 2-2h8" />
+                  <path d="M15 3h6v6" />
+                  <path d="M10 14l11-11" />
+                </svg>
+                <span
+                  className={cn(
+                    'pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity',
+                    isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
+                    'group-hover:opacity-100 group-focus-visible:opacity-100',
+                  )}>
+                  {t.apiKey}
+                </span>
+              </button>
+              {apiKeyOpen && (
+                <div
+                  className={cn(
+                    'absolute right-0 z-20 mt-2 w-72 overflow-hidden rounded-md border p-3 text-sm shadow-lg',
+                    isLight ? 'border-slate-200 bg-white text-gray-900' : 'border-slate-700 bg-slate-800 text-gray-100',
+                  )}>
+                  <div className="mb-2 font-medium">{t.setApiKey}</div>
+                  <input
+                    type="password"
+                    value={apiKeyInput}
+                    onChange={e => setApiKeyInput(e.target.value)}
+                    placeholder={t.enterApiKey}
+                    className={cn(
+                      'mb-2 w-full rounded border px-2 py-1',
+                      isLight ? 'border-slate-300 bg-white' : 'border-slate-600 bg-slate-700',
+                    )}
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setApiKeyOpen(false);
+                        const key = apiKeyInput.trim();
+                        setApiKeyMasked(key ? `${key.slice(0, 3)}••••${key.slice(-4)}` : '');
+                      }}
+                      className={cn(
+                        'rounded px-3 py-1 text-sm',
+                        isLight
+                          ? 'bg-violet-600 text-white hover:bg-violet-700'
+                          : 'bg-violet-600 text-white hover:bg-violet-500',
+                      )}
+                      aria-label={t.save}
+                      title={t.save}>
+                      {t.save}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setApiKeyInput('');
+                        setApiKeyMasked('');
+                      }}
+                      className={cn(
+                        'rounded px-3 py-1 text-sm',
+                        isLight ? 'bg-slate-200 hover:bg-slate-300' : 'bg-slate-700 hover:bg-slate-600',
+                      )}
+                      aria-label={t.clear}
+                      title={t.clear}>
+                      {t.clear}
+                    </button>
+                    <div className="ml-auto text-xs opacity-70">{apiKeyMasked || t.missingKey}</div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
