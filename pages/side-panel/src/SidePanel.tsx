@@ -191,7 +191,7 @@ const MAX_PDF_BYTES = 10 * 1024 * 1024;
 type ResponseAnnotation = { url?: string; title?: string };
 type ResponseContent = { text?: string; annotations?: ResponseAnnotation[] };
 type ResponseOutputItem = { type?: string; content?: ResponseContent[] };
-type ResponsesResult = { id?: string; output?: ResponseOutputItem[] };
+type ResponsesResult = { id?: string; output?: ResponseOutputItem[]; output_text?: string };
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
 
@@ -514,7 +514,8 @@ const SidePanel = () => {
       .then(r => r.json())
       .then((json: ResponsesResult) => {
         if (typeof json?.id === 'string') lastResponseIdRef.current = json.id as string;
-        const text = extractTextFromOutput(json?.output);
+        let text = extractTextFromOutput(json?.output);
+        if (!text && typeof json?.output_text === 'string') text = json.output_text;
         const citations = (() => {
           try {
             return extractCitationsFromOutput(json?.output);
@@ -905,7 +906,8 @@ const SidePanel = () => {
         .then(r => r.json())
         .then((json: ResponsesResult) => {
           if (typeof json?.id === 'string') lastResponseIdRef.current = json.id as string;
-          const text = extractTextFromOutput(json?.output);
+          let text = extractTextFromOutput(json?.output);
+          if (!text && typeof json?.output_text === 'string') text = json.output_text;
           const citations = (() => {
             try {
               return extractCitationsFromOutput(json?.output);
