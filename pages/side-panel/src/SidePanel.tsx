@@ -195,23 +195,7 @@ type ResponsesResult = { id?: string; output?: ResponseOutputItem[]; output_text
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
 
-const extractTextFromOutput = (output: unknown): string => {
-  if (!Array.isArray(output)) return '';
-  for (let i = output.length - 1; i >= 0; i--) {
-    const item = output[i];
-    if (!isRecord(item)) continue;
-    const content = (item as ResponseOutputItem).content;
-    if (!Array.isArray(content)) continue;
-    const parts: string[] = [];
-    for (const c of content) {
-      if (!isRecord(c)) continue;
-      const text = (c as ResponseContent).text;
-      if (typeof text === 'string' && text.length > 0) parts.push(text);
-    }
-    if (parts.length > 0) return parts.join('\n\n');
-  }
-  return '';
-};
+// Removed unused extractTextFromOutput to satisfy eslint no-unused-vars
 
 const extractCitationsFromOutput = (output: unknown): { title?: string; url: string }[] => {
   const urls: { title?: string; url: string }[] = [];
@@ -977,67 +961,76 @@ const SidePanel = () => {
         lastRequestRef.current?.inputPayload ??
         (uiLocale === 'ru' ? 'Перегенерируй предыдущий ответ' : 'Regenerate previous answer');
 
-      fetch('https://api.openai.com/v1/responses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-        body: JSON.stringify({
-          model,
-          input: inputPayload,
-          ...(webAccessEnabled ? { tools: [{ type: 'web_search' }], tool_choice: 'auto' as const } : {}),
-          ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
-        }),
-      })
-        .then(r => r.json())
-        .then((json: ResponsesResult) => {
-          if (typeof json?.id === 'string') lastResponseIdRef.current = json.id as string;
-          let text = extractTextFromOutput(json?.output);
-          if (!text && typeof json?.output_text === 'string') text = json.output_text;
-          const citations = (() => {
-            try {
-              return extractCitationsFromOutput(json?.output);
-            } catch {
-              return [];
-            }
-          })();
-          const newContent =
-            (text || (uiLocale === 'ru' ? 'Нет текста ответа.' : 'No text in response.')) +
-            (citations.length > 0
-              ? '\n\n' +
+      // Reset the target assistant message content before streaming
+      setMessages(prev => prev.map(m => (m.id === id && m.type === 'text' ? { ...m, content: '' } : m)));
+      upsertActiveThread(thread => ({
+        ...thread,
+        updatedAt: Date.now(),
+        messages: thread.messages.map(m => (m.id === id && m.type === 'text' ? { ...m, content: '' } : m)),
+      }));
+
+      void streamResponsesApi(
+        {
+          apiKey: key,
+          body: {
+            model,
+            input: inputPayload,
+            text: { format: { type: 'text' } },
+            ...(webAccessEnabled ? { tools: [{ type: 'web_search' }], tool_choice: 'auto' as const } : {}),
+            ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
+          },
+        },
+        {
+          onDelta: chunk => {
+            setMessages(prev =>
+              prev.map(m => (m.id === id && m.type === 'text' ? { ...m, content: (m.content ?? '') + chunk } : m)),
+            );
+            upsertActiveThread(thread => ({
+              ...thread,
+              messages: thread.messages.map(m =>
+                m.id === id && m.type === 'text' ? { ...m, content: (m.content ?? '') + chunk } : m,
+              ),
+            }));
+          },
+          onDone: final => {
+            if (final && typeof final.id === 'string') lastResponseIdRef.current = final.id;
+            const citations = final ? extractCitationsFromOutput(final.output) : [];
+            if (citations.length > 0) {
+              const suffix =
+                '\n\n' +
                 (uiLocale === 'ru' ? 'Источники:' : 'Sources:') +
                 '\n' +
                 citations
                   .slice(0, 8)
                   .map(c => `- ${c.title ? `[${c.title}](${c.url})` : c.url}`)
-                  .join('\n')
-              : '');
-          setMessages(prev =>
-            prev.map(m =>
-              m.id === id && m.role === 'assistant' && m.type === 'text' ? { ...m, content: newContent } : m,
-            ),
-          );
-          upsertActiveThread(thread => ({
-            ...thread,
-            updatedAt: Date.now(),
-            messages: thread.messages.map(m =>
-              m.id === id && m.role === 'assistant' && m.type === 'text' ? { ...m, content: newContent } : m,
-            ),
-          }));
-        })
-        .catch(() => {
-          const newContent = uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.';
-          setMessages(prev =>
-            prev.map(m =>
-              m.id === id && m.role === 'assistant' && m.type === 'text' ? { ...m, content: newContent } : m,
-            ),
-          );
-          upsertActiveThread(thread => ({
-            ...thread,
-            updatedAt: Date.now(),
-            messages: thread.messages.map(m =>
-              m.id === id && m.role === 'assistant' && m.type === 'text' ? { ...m, content: newContent } : m,
-            ),
-          }));
-        });
+                  .join('\n');
+              setMessages(prev =>
+                prev.map(m => (m.id === id && m.type === 'text' ? { ...m, content: (m.content ?? '') + suffix } : m)),
+              );
+              upsertActiveThread(thread => ({
+                ...thread,
+                updatedAt: Date.now(),
+                messages: thread.messages.map(m =>
+                  m.id === id && m.type === 'text' ? { ...m, content: (m.content ?? '') + suffix } : m,
+                ),
+              }));
+            } else {
+              upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
+            }
+          },
+          onError: () => {
+            const newContent = uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.';
+            setMessages(prev => prev.map(m => (m.id === id && m.type === 'text' ? { ...m, content: newContent } : m)));
+            upsertActiveThread(thread => ({
+              ...thread,
+              updatedAt: Date.now(),
+              messages: thread.messages.map(m =>
+                m.id === id && m.type === 'text' ? { ...m, content: newContent } : m,
+              ),
+            }));
+          },
+        },
+      );
     },
     [apiKeyInput, llmModel, uiLocale, upsertActiveThread, t.missingKey, webAccessEnabled],
   );
