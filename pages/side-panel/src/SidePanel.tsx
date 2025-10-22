@@ -168,6 +168,7 @@ type ChatThread = {
   title: string;
   createdAt: number;
   updatedAt: number;
+  lastResponseId?: string;
   messages: ChatMessage[];
 };
 
@@ -236,6 +237,16 @@ const streamResponsesApi = async (
       },
       body: JSON.stringify({ ...body, stream: true }),
     });
+    if (!res.ok) {
+      let bodyText = '';
+      try {
+        bodyText = await res.text();
+      } catch {
+        // ignore
+      }
+      onError({ status: res.status, body: bodyText });
+      return;
+    }
     if (!res.body) throw new Error('No response body');
     const reader = res.body.getReader();
     const decoder = new TextDecoder('utf-8');
@@ -470,6 +481,12 @@ const SidePanel = () => {
     if (toSave === '' || toSave.startsWith('sk-')) void chrome.storage?.local.set({ openai_api_key: toSave });
   }, [apiKeyInput]);
 
+  // Keep previous_response_id ref in sync with the active thread (survives reload via storage -> threads)
+  useEffect(() => {
+    const activeThread = threads.find(t => t.id === activeId);
+    lastResponseIdRef.current = activeThread?.lastResponseId ?? null;
+  }, [threads, activeId]);
+
   const canSend = useMemo(() => input.trim().length > 0 || attachments.length > 0, [input, attachments]);
 
   // Scroll to bottom when messages change
@@ -592,6 +609,9 @@ const SidePanel = () => {
         },
         onDone: final => {
           if (final && typeof final.id === 'string') lastResponseIdRef.current = final.id;
+          setThreads(prev =>
+            prev.map(t => (t.id === activeId ? { ...t, lastResponseId: lastResponseIdRef.current ?? undefined } : t)),
+          );
           const citations = final ? extractCitationsFromOutput(final.output) : [];
           if (citations.length > 0) {
             const suffix =
@@ -619,7 +639,100 @@ const SidePanel = () => {
           }
           queueMicrotask(() => inputRef.current?.focus());
         },
-        onError: () => {
+        onError: err => {
+          console.error('[CEB][SidePanel] OpenAI stream error (send)', err);
+          const status =
+            err && typeof err === 'object' && 'status' in (err as Record<string, unknown>)
+              ? Number((err as Record<string, unknown>).status)
+              : undefined;
+          // Fallback 1: retry without web_search tool on 403
+          if (status === 403 && webAccessEnabled) {
+            void streamResponsesApi(
+              {
+                apiKey: key,
+                body: { model, input: inputPayload, text: { format: { type: 'text' } } },
+              },
+              {
+                onDelta: chunk => {
+                  setMessages(prev =>
+                    prev.map(m =>
+                      m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + chunk } : m,
+                    ),
+                  );
+                  upsertActiveThread(thread => ({
+                    ...thread,
+                    messages: thread.messages.map(m =>
+                      m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + chunk } : m,
+                    ),
+                  }));
+                },
+                onDone: final => {
+                  if (final && typeof final.id === 'string') lastResponseIdRef.current = final.id;
+                  const citations = final ? extractCitationsFromOutput(final.output) : [];
+                  if (citations.length > 0) {
+                    const suffix =
+                      '\n\n' +
+                      (uiLocale === 'ru' ? 'Источники:' : 'Sources:') +
+                      '\n' +
+                      citations
+                        .slice(0, 8)
+                        .map(c => `- ${c.title ? `[${c.title}](${c.url})` : c.url}`)
+                        .join('\n');
+                    setMessages(prev =>
+                      prev.map(m =>
+                        m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + suffix } : m,
+                      ),
+                    );
+                    upsertActiveThread(thread => ({
+                      ...thread,
+                      updatedAt: Date.now(),
+                      messages: thread.messages.map(m =>
+                        m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + suffix } : m,
+                      ),
+                    }));
+                  } else {
+                    upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
+                  }
+                  queueMicrotask(() => inputRef.current?.focus());
+                },
+                onError: () => {
+                  const content = uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.';
+                  setMessages(prev => prev.map(m => (m.id === streamId && m.type === 'text' ? { ...m, content } : m)));
+                  upsertActiveThread(thread => ({
+                    ...thread,
+                    updatedAt: Date.now(),
+                    messages: thread.messages.map(m =>
+                      m.id === streamId && m.type === 'text' ? { ...m, content } : m,
+                    ),
+                  }));
+                  queueMicrotask(() => inputRef.current?.focus());
+                },
+              },
+            );
+            return;
+          }
+          // Fallback 2: switch to gpt-4o-mini if deep model 403s
+          if (status === 403 && model === 'gpt-4o') {
+            const fallbackModel = 'gpt-4o-mini';
+            void streamResponsesApi(
+              {
+                apiKey: key,
+                body: { model: fallbackModel, input: inputPayload, text: { format: { type: 'text' } } },
+              },
+              {
+                onDelta: chunk => {
+                  setMessages(prev =>
+                    prev.map(m =>
+                      m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + chunk } : m,
+                    ),
+                  );
+                },
+                onDone: () => undefined,
+                onError: () => undefined,
+              },
+            );
+            return;
+          }
           const content = uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.';
           setMessages(prev => prev.map(m => (m.id === streamId && m.type === 'text' ? { ...m, content } : m)));
           upsertActiveThread(thread => ({
@@ -641,6 +754,7 @@ const SidePanel = () => {
     llmModel,
     t.missingKey,
     webAccessEnabled,
+    activeId,
   ]);
 
   const onKeyDown = useCallback(
@@ -935,6 +1049,40 @@ const SidePanel = () => {
     [upsertActiveThread],
   );
 
+  // Rebuild input payload for regeneration by inspecting the user messages preceding the assistant message
+  const reconstructInputPayload = useCallback(
+    (assistantMessageId: string): unknown | null => {
+      const idx = messages.findIndex(m => m.id === assistantMessageId);
+      if (idx <= 0) return null;
+      // Find the last contiguous block of user messages immediately before the assistant message
+      let end = idx - 1;
+      // Skip any non-user items just in case
+      while (end >= 0 && messages[end].role !== 'user') end--;
+      if (end < 0) return null;
+      const endMsg = messages[end];
+      const batchId = endMsg.batchId;
+      let start = end;
+      if (batchId) {
+        while (start - 1 >= 0 && messages[start - 1].batchId === batchId) start--;
+      }
+      const group = messages.slice(start, end + 1).filter(m => m.role === 'user');
+      if (group.length === 0) return null;
+
+      const isTextMessage = (m: ChatMessage): m is Extract<ChatMessage, { type: 'text' }> => m.type === 'text';
+      const isImageMessage = (m: ChatMessage): m is Extract<ChatMessage, { type: 'image' }> => m.type === 'image';
+
+      const textItem = [...group].reverse().find(isTextMessage);
+      const text = textItem?.content || (uiLocale === 'ru' ? 'Опиши вложения.' : 'Describe the attachments.');
+      const imageParts = group.filter(isImageMessage).map(m => ({ type: 'input_image', image_url: m.dataUrl }));
+
+      if (imageParts.length > 0) {
+        return [{ role: 'user', content: [{ type: 'input_text', text }, ...imageParts] }];
+      }
+      return text;
+    },
+    [messages, uiLocale],
+  );
+
   // Regenerate assistant text message via API
   const regenerateAssistantMessage = useCallback(
     (id: string) => {
@@ -957,9 +1105,16 @@ const SidePanel = () => {
       }
       const model =
         (lastRequestRef.current?.model as string | undefined) ?? (llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini');
-      const inputPayload =
-        lastRequestRef.current?.inputPayload ??
-        (uiLocale === 'ru' ? 'Перегенерируй предыдущий ответ' : 'Regenerate previous answer');
+      let inputPayload: unknown = lastRequestRef.current?.inputPayload ?? null;
+      if (inputPayload == null) {
+        const rebuilt = reconstructInputPayload(id);
+        if (rebuilt) {
+          inputPayload = rebuilt;
+          lastRequestRef.current = { model, inputPayload: rebuilt };
+        } else {
+          inputPayload = uiLocale === 'ru' ? 'Перегенерируй предыдущий ответ' : 'Regenerate previous answer';
+        }
+      }
 
       // Reset the target assistant message content before streaming
       setMessages(prev => prev.map(m => (m.id === id && m.type === 'text' ? { ...m, content: '' } : m)));
@@ -1032,7 +1187,7 @@ const SidePanel = () => {
         },
       );
     },
-    [apiKeyInput, llmModel, uiLocale, upsertActiveThread, t.missingKey, webAccessEnabled],
+    [apiKeyInput, llmModel, uiLocale, upsertActiveThread, t.missingKey, webAccessEnabled, reconstructInputPayload],
   );
 
   // Delete thread with confirmation
