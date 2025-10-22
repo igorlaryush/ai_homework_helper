@@ -512,6 +512,36 @@ const SidePanel = () => {
     [activeId],
   );
 
+  // Build last N user turns (current + previous) into Responses API input items
+  const buildHistoryInputItemsFrom = useCallback(
+    (all: ChatMessage[], maxTurns: number = 5): Array<Record<string, unknown>> => {
+      const items: Array<Record<string, unknown>> = [];
+      let i = all.length - 1;
+      while (i >= 0 && items.length < maxTurns) {
+        while (i >= 0 && all[i].role !== 'user') i--;
+        if (i < 0) break;
+        const end = i;
+        const endMsg = all[end];
+        const batchId = endMsg.batchId;
+        let start = end;
+        if (batchId) {
+          while (start - 1 >= 0 && all[start - 1].role === 'user' && all[start - 1].batchId === batchId) start--;
+        }
+        const group = all.slice(start, end + 1).filter(m => m.role === 'user');
+        const isTextMessage = (m: ChatMessage): m is Extract<ChatMessage, { type: 'text' }> => m.type === 'text';
+        const isImageMessage = (m: ChatMessage): m is Extract<ChatMessage, { type: 'image' }> => m.type === 'image';
+        const textItem = [...group].reverse().find(isTextMessage);
+        const images = group.filter(isImageMessage);
+        const text = textItem?.content || (uiLocale === 'ru' ? 'Опиши вложения.' : 'Describe the attachments.');
+        const imageParts = images.map(img => ({ type: 'input_image', image_url: img.dataUrl }));
+        items.push({ role: 'user', content: [{ type: 'input_text', text }, ...imageParts] });
+        i = start - 1;
+      }
+      return items.reverse();
+    },
+    [uiLocale],
+  );
+
   const handleSend = useCallback(() => {
     if (!canSend) return;
 
@@ -523,9 +553,10 @@ const SidePanel = () => {
       else out.push({ id: `file-${a.id}`, role: 'user', type: 'file', name: a.name, size: a.size, mime: a.mime });
     }
 
+    let withBatch: ChatMessage[] = [];
     if (out.length > 0) {
       const batchId = out.length > 1 ? `batch-${Date.now()}` : undefined;
-      const withBatch = batchId ? out.map(m => ({ ...m, batchId })) : out;
+      withBatch = batchId ? out.map(m => ({ ...m, batchId })) : out;
       setMessages(prev => [...prev, ...withBatch]);
       upsertActiveThread(thread => ({
         ...thread,
@@ -542,8 +573,8 @@ const SidePanel = () => {
 
     // Prepare API request before clearing inputs
     const key = apiKeyInput.trim();
-    const attachmentsAtSend = attachments;
-    const textForAI = input.trim() || (uiLocale === 'ru' ? 'Опиши вложения.' : 'Describe the attachments.');
+    // Build contextual history including the just-appended user turn
+    const allMessagesForContext = withBatch.length > 0 ? [...messages, ...withBatch] : messages;
 
     setInput('');
     setAttachments([]);
@@ -566,13 +597,7 @@ const SidePanel = () => {
     }
 
     const model = llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini';
-    const imageParts = attachmentsAtSend
-      .filter(a => a.kind === 'image')
-      .map(a => ({ type: 'input_image', image_url: (a as Extract<Attachment, { kind: 'image' }>).dataUrl }));
-    const inputPayload =
-      imageParts.length > 0
-        ? [{ role: 'user', content: [{ type: 'input_text', text: textForAI }, ...imageParts] }]
-        : textForAI;
+    const inputPayload = buildHistoryInputItemsFrom(allMessagesForContext, 5);
 
     lastRequestRef.current = { model, inputPayload };
 
@@ -593,6 +618,7 @@ const SidePanel = () => {
           input: inputPayload,
           text: { format: { type: 'text' } },
           ...(webAccessEnabled ? { tools: [{ type: 'web_search' }], tool_choice: 'auto' as const } : {}),
+          ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
         },
       },
       {
@@ -650,7 +676,12 @@ const SidePanel = () => {
             void streamResponsesApi(
               {
                 apiKey: key,
-                body: { model, input: inputPayload, text: { format: { type: 'text' } } },
+                body: {
+                  model,
+                  input: inputPayload,
+                  text: { format: { type: 'text' } },
+                  ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
+                },
               },
               {
                 onDelta: chunk => {
@@ -717,7 +748,12 @@ const SidePanel = () => {
             void streamResponsesApi(
               {
                 apiKey: key,
-                body: { model: fallbackModel, input: inputPayload, text: { format: { type: 'text' } } },
+                body: {
+                  model: fallbackModel,
+                  input: inputPayload,
+                  text: { format: { type: 'text' } },
+                  ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
+                },
               },
               {
                 onDelta: chunk => {
@@ -755,6 +791,8 @@ const SidePanel = () => {
     t.missingKey,
     webAccessEnabled,
     activeId,
+    messages,
+    buildHistoryInputItemsFrom,
   ]);
 
   const onKeyDown = useCallback(
