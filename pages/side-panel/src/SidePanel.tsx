@@ -411,7 +411,8 @@ const SidePanel = () => {
         isLight ? 'bg-violet-100 text-violet-700' : 'bg-slate-700 text-violet-300',
       )}>
       <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M12 2a2 2 0 0 0-2 2v1H7a3 3 0 0 0-3 3v6a5 5 0 0 0 5 5h6a5 5 0 0 0 5-5V8a3 3 0 0 0-3-3h-3V4a2 2 0 0 0-2-2zm-4 9a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm8 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zM8 16h8a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2z" />
+        <path d="M12 3 2 8l10 5 7-3.5V15h2V8L12 3z" />
+        <path d="M5 12v3.5A4.5 4.5 0 0 0 9.5 20h5A4.5 4.5 0 0 0 19 15.5V12l-7 3.5L5 12z" />
       </svg>
     </div>
   );
@@ -560,6 +561,17 @@ const SidePanel = () => {
       return items.reverse();
     },
     [uiLocale],
+  );
+
+  // Build last N user turns that appear BEFORE a specific assistant message id
+  const buildHistoryInputItemsBeforeMessage = useCallback(
+    (assistantMessageId: string, maxTurns: number = 5): Array<Record<string, unknown>> => {
+      const idx = messages.findIndex(m => m.id === assistantMessageId);
+      if (idx <= 0) return [];
+      const all = messages.slice(0, idx);
+      return buildHistoryInputItemsFrom(all, maxTurns);
+    },
+    [messages, buildHistoryInputItemsFrom],
   );
 
   const handleSend = useCallback(() => {
@@ -1107,40 +1119,6 @@ const SidePanel = () => {
     [upsertActiveThread],
   );
 
-  // Rebuild input payload for regeneration by inspecting the user messages preceding the assistant message
-  const reconstructInputPayload = useCallback(
-    (assistantMessageId: string): unknown | null => {
-      const idx = messages.findIndex(m => m.id === assistantMessageId);
-      if (idx <= 0) return null;
-      // Find the last contiguous block of user messages immediately before the assistant message
-      let end = idx - 1;
-      // Skip any non-user items just in case
-      while (end >= 0 && messages[end].role !== 'user') end--;
-      if (end < 0) return null;
-      const endMsg = messages[end];
-      const batchId = endMsg.batchId;
-      let start = end;
-      if (batchId) {
-        while (start - 1 >= 0 && messages[start - 1].batchId === batchId) start--;
-      }
-      const group = messages.slice(start, end + 1).filter(m => m.role === 'user');
-      if (group.length === 0) return null;
-
-      const isTextMessage = (m: ChatMessage): m is Extract<ChatMessage, { type: 'text' }> => m.type === 'text';
-      const isImageMessage = (m: ChatMessage): m is Extract<ChatMessage, { type: 'image' }> => m.type === 'image';
-
-      const textItem = [...group].reverse().find(isTextMessage);
-      const text = textItem?.content || (uiLocale === 'ru' ? 'Опиши вложения.' : 'Describe the attachments.');
-      const imageParts = group.filter(isImageMessage).map(m => ({ type: 'input_image', image_url: m.dataUrl }));
-
-      if (imageParts.length > 0) {
-        return [{ role: 'user', content: [{ type: 'input_text', text }, ...imageParts] }];
-      }
-      return text;
-    },
-    [messages, uiLocale],
-  );
-
   // Regenerate assistant text message via API
   const regenerateAssistantMessage = useCallback(
     (id: string) => {
@@ -1163,16 +1141,15 @@ const SidePanel = () => {
       }
       const model =
         (lastRequestRef.current?.model as string | undefined) ?? (llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini');
-      let inputPayload: unknown = lastRequestRef.current?.inputPayload ?? null;
-      if (inputPayload == null) {
-        const rebuilt = reconstructInputPayload(id);
-        if (rebuilt) {
-          inputPayload = rebuilt;
-          lastRequestRef.current = { model, inputPayload: rebuilt };
-        } else {
-          inputPayload = uiLocale === 'ru' ? 'Перегенерируй предыдущий ответ' : 'Regenerate previous answer';
-        }
-      }
+      const historyInput = buildHistoryInputItemsBeforeMessage(id, 5);
+      let inputPayload: unknown = null;
+      if (historyInput.length > 0) inputPayload = historyInput;
+      else if (lastRequestRef.current?.inputPayload) inputPayload = lastRequestRef.current.inputPayload;
+      else inputPayload = uiLocale === 'ru' ? 'Перегенерируй предыдущий ответ' : 'Regenerate previous answer';
+
+      // Only include previous_response_id when regenerating the most recent assistant message
+      const targetIdx = messages.findIndex(m => m.id === id);
+      const isLatestTarget = targetIdx === messages.length - 1;
 
       // Reset the target assistant message content before streaming
       setMessages(prev => prev.map(m => (m.id === id && m.type === 'text' ? { ...m, content: '' } : m)));
@@ -1190,7 +1167,7 @@ const SidePanel = () => {
             input: inputPayload,
             text: { format: { type: 'text' } },
             ...(webAccessEnabled ? { tools: [{ type: 'web_search' }], tool_choice: 'auto' as const } : {}),
-            ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
+            ...(isLatestTarget && lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
           },
         },
         {
@@ -1245,7 +1222,16 @@ const SidePanel = () => {
         },
       );
     },
-    [apiKeyInput, llmModel, uiLocale, upsertActiveThread, t.missingKey, webAccessEnabled, reconstructInputPayload],
+    [
+      apiKeyInput,
+      llmModel,
+      uiLocale,
+      upsertActiveThread,
+      t.missingKey,
+      webAccessEnabled,
+      buildHistoryInputItemsBeforeMessage,
+      messages,
+    ],
   );
 
   // Delete thread with confirmation
