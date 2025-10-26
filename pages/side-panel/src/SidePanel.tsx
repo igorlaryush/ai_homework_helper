@@ -323,6 +323,36 @@ const cropImageDataUrl = async (
   return canvas.toDataURL('image/png');
 };
 
+// Upload a file to OpenAI Files API and return file_id
+const uploadFileToOpenAI = async ({ apiKey, file }: { apiKey: string; file: File }): Promise<string> => {
+  const form = new FormData();
+  form.append('file', file, file.name);
+  // Use user_data for files that will be used as model inputs per OpenAI guidance
+  form.append('purpose', 'user_data');
+
+  const res = await fetch('https://api.openai.com/v1/files', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: form,
+  });
+
+  if (!res.ok) {
+    let bodyText = '';
+    try {
+      bodyText = await res.text();
+    } catch {
+      // ignore
+    }
+    throw new Error(`File upload failed: ${res.status} ${bodyText}`);
+  }
+  const json = (await res.json()) as { id?: string };
+  const id = typeof json.id === 'string' ? json.id : '';
+  if (!id) throw new Error('Invalid file id from OpenAI Files API');
+  return id;
+};
+
 const initialAssistant: ChatMessage = {
   id: 'm-hello',
   role: 'assistant',
@@ -359,7 +389,7 @@ const SidePanel = () => {
   const [apiKeyOpen, setApiKeyOpen] = useState<boolean>(false);
   const [apiKeyInput, setApiKeyInput] = useState<string>('');
   const [apiKeyMasked, setApiKeyMasked] = useState<string>('');
-  const lastRequestRef = useRef<{ model: string; inputPayload: unknown } | null>(null);
+  const lastRequestRef = useRef<{ model: string; inputPayload: unknown; fileIds?: string[] } | null>(null);
 
   const [uiLocale, setUiLocale] = useState<'en' | 'ru'>('en');
   const [langOpen, setLangOpen] = useState<boolean>(false);
@@ -399,6 +429,8 @@ const SidePanel = () => {
   const imageActiveTimeoutRef = useRef<number | undefined>(undefined);
   const fileActiveTimeoutRef = useRef<number | undefined>(undefined);
   const readFileInputRef = useRef<HTMLInputElement | null>(null);
+  // In-memory map of attachment id -> File object for uploads
+  const attachmentFileMapRef = useRef<Record<string, File>>({});
 
   const t = UI_I18N[uiLocale];
   const headerTitle = mode === 'ask' ? t.title : mode === 'read' ? t.nav_read : t.nav_write;
@@ -574,7 +606,7 @@ const SidePanel = () => {
     [messages, buildHistoryInputItemsFrom],
   );
 
-  const handleSend = useCallback(() => {
+  const handleSend = useCallback(async () => {
     if (!canSend) return;
 
     const out: ChatMessage[] = [];
@@ -609,7 +641,6 @@ const SidePanel = () => {
     const allMessagesForContext = withBatch.length > 0 ? [...messages, ...withBatch] : messages;
 
     setInput('');
-    setAttachments([]);
 
     if (!key) {
       const assistantMsg: ChatMessage = {
@@ -631,7 +662,63 @@ const SidePanel = () => {
     const model = llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini';
     const inputPayload = buildHistoryInputItemsFrom(allMessagesForContext, 5);
 
-    lastRequestRef.current = { model, inputPayload };
+    // Upload file attachments via Files API to enable file_search
+    const fileAttachmentIds = attachments.filter(a => a.kind === 'file').map(a => a.id);
+    let uploadedPairs: Array<{ file: File; fileId: string }> = [];
+    if (fileAttachmentIds.length > 0) {
+      try {
+        const filesToUpload = fileAttachmentIds
+          .map(id => attachmentFileMapRef.current[id])
+          .filter((f): f is File => !!f);
+        uploadedPairs = await Promise.all(
+          filesToUpload.map(async file => ({ file, fileId: await uploadFileToOpenAI({ apiKey: key, file }) })),
+        );
+      } catch (e) {
+        console.error('[CEB][SidePanel] File upload error', e);
+        const msgText =
+          uiLocale === 'ru' ? 'Не удалось загрузить файл(ы) в OpenAI.' : 'Failed to upload file(s) to OpenAI.';
+        const assistantMsg: ChatMessage = {
+          id: `assistant-${Date.now() + 1}`,
+          role: 'assistant',
+          type: 'text',
+          content: msgText,
+        };
+        setMessages(prev => [...prev, assistantMsg]);
+        upsertActiveThread(thread => ({
+          ...thread,
+          updatedAt: Date.now(),
+          messages: [...thread.messages, assistantMsg],
+        }));
+        // Clear attachments after error
+        setAttachments([]);
+        queueMicrotask(() => inputRef.current?.focus());
+        return;
+      }
+    }
+
+    // Prepare input_file parts for uploaded PDF files
+    const uploadedFileIds: string[] = uploadedPairs.map(p => p.fileId);
+    const uploadedPdfFileIds: string[] = uploadedPairs
+      .filter(p => p.file.type === 'application/pdf' || p.file.name.toLowerCase().endsWith('.pdf'))
+      .map(p => p.fileId);
+
+    const inputWithFiles =
+      uploadedPdfFileIds.length > 0
+        ? [
+            ...inputPayload,
+            {
+              role: 'user',
+              content: uploadedPdfFileIds.map(file_id => ({ type: 'input_file', file_id })),
+            },
+          ]
+        : inputPayload;
+
+    // Clear attachments after preparing payload and potential uploads
+    setAttachments([]);
+    // Clean used files from the map
+    for (const id of fileAttachmentIds) delete attachmentFileMapRef.current[id];
+
+    lastRequestRef.current = { model, inputPayload: inputWithFiles, fileIds: uploadedFileIds };
 
     // Streaming placeholder message
     const streamId = `assistant-${Date.now() + 1}`;
@@ -642,14 +729,18 @@ const SidePanel = () => {
       messages: [...thread.messages, { id: streamId, role: 'assistant', type: 'text', content: '' }],
     }));
 
+    const combinedTools: Array<{ type: 'web_search' }> = [];
+    if (webAccessEnabled) combinedTools.push({ type: 'web_search' });
+
     void streamResponsesApi(
       {
         apiKey: key,
         body: {
           model,
-          input: inputPayload,
+          input: inputWithFiles,
           text: { format: { type: 'text' } },
-          ...(webAccessEnabled ? { tools: [{ type: 'web_search' }], tool_choice: 'auto' as const } : {}),
+          // Enable web_search if requested; files are passed via input_file
+          ...(combinedTools.length > 0 ? { tools: combinedTools, tool_choice: 'auto' as const } : {}),
           ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
         },
       },
@@ -710,8 +801,9 @@ const SidePanel = () => {
                 apiKey: key,
                 body: {
                   model,
-                  input: inputPayload,
+                  input: inputWithFiles,
                   text: { format: { type: 'text' } },
+                  // No tools on retry
                   ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
                 },
               },
@@ -782,8 +874,9 @@ const SidePanel = () => {
                 apiKey: key,
                 body: {
                   model: fallbackModel,
-                  input: inputPayload,
+                  input: inputWithFiles,
                   text: { format: { type: 'text' } },
+                  // No tools on fallback
                   ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
                 },
               },
@@ -887,16 +980,22 @@ const SidePanel = () => {
 
     const files = Array.from(event.target.files ?? []);
     if (files.length === 0) return;
-    setAttachments(prev => [
-      ...prev,
-      ...files.map((f, idx) => ({
-        id: `${Date.now()}-${prev.length + idx}`,
-        kind: 'file' as const,
-        name: f.name,
-        size: f.size,
-        mime: f.type || 'application/octet-stream',
-      })),
-    ]);
+    const baseTime = Date.now();
+    setAttachments(prev => {
+      const newItems = files.map((f, idx) => {
+        const id = `${baseTime}-${prev.length + idx}`;
+        // Track file object for later upload
+        attachmentFileMapRef.current[id] = f;
+        return {
+          id,
+          kind: 'file' as const,
+          name: f.name,
+          size: f.size,
+          mime: f.type || 'application/octet-stream',
+        };
+      });
+      return [...prev, ...newItems];
+    });
     event.target.value = '';
   }, []);
 
@@ -1091,7 +1190,11 @@ const SidePanel = () => {
     return () => chrome.runtime.onMessage.removeListener(onMessage);
   }, []);
 
-  const removeAttachment = useCallback((id: string) => setAttachments(prev => prev.filter(a => a.id !== id)), []);
+  const removeAttachment = useCallback((id: string) => {
+    setAttachments(prev => prev.filter(a => a.id !== id));
+    // Also remove any tracked File object
+    delete attachmentFileMapRef.current[id];
+  }, []);
 
   // Delete single message
   const deleteMessage = useCallback(
@@ -1159,6 +1262,9 @@ const SidePanel = () => {
         messages: thread.messages.map(m => (m.id === id && m.type === 'text' ? { ...m, content: '' } : m)),
       }));
 
+      const regenTools: Array<{ type: 'web_search' }> = [];
+      if (webAccessEnabled) regenTools.push({ type: 'web_search' });
+
       void streamResponsesApi(
         {
           apiKey: key,
@@ -1166,7 +1272,8 @@ const SidePanel = () => {
             model,
             input: inputPayload,
             text: { format: { type: 'text' } },
-            ...(webAccessEnabled ? { tools: [{ type: 'web_search' }], tool_choice: 'auto' as const } : {}),
+            ...(regenTools.length > 0 ? { tools: regenTools } : {}),
+            ...(regenTools.length > 0 ? { tool_choice: 'auto' as const } : {}),
             ...(isLatestTarget && lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
           },
         },
@@ -1424,24 +1531,29 @@ const SidePanel = () => {
     // prevent inserting binary garbage into textarea
     event.preventDefault();
 
-    const generic: { name: string; size: number; mime: string }[] = [];
+    const genericFiles: File[] = [];
     const imageFiles: File[] = [];
     for (const f of files) {
       if (f.type.startsWith('image/')) imageFiles.push(f);
-      else generic.push({ name: f.name, size: f.size, mime: f.type || 'application/octet-stream' });
+      else genericFiles.push(f);
     }
 
-    if (generic.length > 0) {
-      setAttachments(prev => [
-        ...prev,
-        ...generic.map((g, idx) => ({
-          id: `${Date.now()}-${prev.length + idx}`,
-          kind: 'file' as const,
-          name: g.name,
-          size: g.size,
-          mime: g.mime,
-        })),
-      ]);
+    if (genericFiles.length > 0) {
+      const baseTime = Date.now();
+      setAttachments(prev => {
+        const newItems = genericFiles.map((f, idx) => {
+          const id = `${baseTime}-${prev.length + idx}`;
+          attachmentFileMapRef.current[id] = f;
+          return {
+            id,
+            kind: 'file' as const,
+            name: f.name,
+            size: f.size,
+            mime: f.type || 'application/octet-stream',
+          };
+        });
+        return [...prev, ...newItems];
+      });
     }
 
     for (const img of imageFiles) {
@@ -1461,7 +1573,7 @@ const SidePanel = () => {
         <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-3 py-2 dark:border-slate-700">
           <div className="flex items-center gap-2">
             <div className="text-base font-semibold">{headerTitle}</div>
-            {mode === 'ask' && <div className="text-xs opacity-70">{t.uiOnly}</div>}
+            {mode === 'ask' && !apiKeyInput.trim() && <div className="text-xs opacity-70">{t.uiOnly}</div>}
           </div>
           <div className="relative flex items-center gap-2">
             {/* Theme toggle */}
