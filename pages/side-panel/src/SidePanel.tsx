@@ -415,6 +415,9 @@ const SidePanel = () => {
   const [apiKeyMasked, setApiKeyMasked] = useState<string>('');
   const lastRequestRef = useRef<{ model: string; inputPayload: unknown; fileIds?: string[] } | null>(null);
 
+  const [isStreaming, setIsStreaming] = useState<boolean>(false);
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+
   const [uiLocale, setUiLocale] = useState<'en' | 'ru'>('en');
   const [langOpen, setLangOpen] = useState<boolean>(false);
   const [mode, setMode] = useState<'ask' | 'read' | 'write'>('ask');
@@ -633,10 +636,12 @@ const SidePanel = () => {
   const handleSend = useCallback(async () => {
     if (!canSend) return;
 
+    const attachmentsSnapshot = attachments;
+
     const out: ChatMessage[] = [];
     const userText = input.trim();
     if (userText) out.push({ id: `user-${Date.now()}`, role: 'user', type: 'text', content: userText });
-    for (const a of attachments) {
+    for (const a of attachmentsSnapshot) {
       if (a.kind === 'image') out.push({ id: `img-${a.id}`, role: 'user', type: 'image', dataUrl: a.dataUrl });
       else out.push({ id: `file-${a.id}`, role: 'user', type: 'file', name: a.name, size: a.size, mime: a.mime });
     }
@@ -665,6 +670,9 @@ const SidePanel = () => {
     const allMessagesForContext = withBatch.length > 0 ? [...messages, ...withBatch] : messages;
 
     setInput('');
+    setAttachments([]);
+    if (imageInputRef.current) imageInputRef.current.value = '';
+    if (fileInputRef.current) fileInputRef.current.value = '';
 
     if (!key) {
       const assistantMsg: ChatMessage = {
@@ -686,8 +694,19 @@ const SidePanel = () => {
     const model = llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini';
     const inputPayload = buildHistoryInputItemsFrom(allMessagesForContext, 5);
 
+    // Streaming placeholder message (show immediately)
+    const streamId = `assistant-${Date.now() + 1}`;
+    setMessages(prev => [...prev, { id: streamId, role: 'assistant', type: 'text', content: '' }]);
+    upsertActiveThread(thread => ({
+      ...thread,
+      updatedAt: Date.now(),
+      messages: [...thread.messages, { id: streamId, role: 'assistant', type: 'text', content: '' }],
+    }));
+    setIsStreaming(true);
+    setStreamingMessageId(streamId);
+
     // Upload file attachments via Files API to enable file_search
-    const fileAttachmentIds = attachments.filter(a => a.kind === 'file').map(a => a.id);
+    const fileAttachmentIds = attachmentsSnapshot.filter(a => a.kind === 'file').map(a => a.id);
     let uploadedPairs: Array<{ file: File; fileId: string }> = [];
     if (fileAttachmentIds.length > 0) {
       try {
@@ -701,19 +720,14 @@ const SidePanel = () => {
         console.error('[CEB][SidePanel] File upload error', e);
         const msgText =
           uiLocale === 'ru' ? 'Не удалось загрузить файл(ы) в OpenAI.' : 'Failed to upload file(s) to OpenAI.';
-        const assistantMsg: ChatMessage = {
-          id: `assistant-${Date.now() + 1}`,
-          role: 'assistant',
-          type: 'text',
-          content: msgText,
-        };
-        setMessages(prev => [...prev, assistantMsg]);
+        // Update the placeholder with error text
+        setMessages(prev => prev.map(m => (m.id === streamId && m.type === 'text' ? { ...m, content: msgText } : m)));
         upsertActiveThread(thread => ({
           ...thread,
           updatedAt: Date.now(),
-          messages: [...thread.messages, assistantMsg],
+          messages: thread.messages.map(m => (m.id === streamId && m.type === 'text' ? { ...m, content: msgText } : m)),
         }));
-        // Clear attachments after error
+        // Ensure attachments are cleared after error
         setAttachments([]);
         queueMicrotask(() => inputRef.current?.focus());
         return;
@@ -737,21 +751,10 @@ const SidePanel = () => {
           ]
         : inputPayload;
 
-    // Clear attachments after preparing payload and potential uploads
-    setAttachments([]);
     // Clean used files from the map
     for (const id of fileAttachmentIds) delete attachmentFileMapRef.current[id];
 
     lastRequestRef.current = { model, inputPayload: inputWithFiles, fileIds: uploadedFileIds };
-
-    // Streaming placeholder message
-    const streamId = `assistant-${Date.now() + 1}`;
-    setMessages(prev => [...prev, { id: streamId, role: 'assistant', type: 'text', content: '' }]);
-    upsertActiveThread(thread => ({
-      ...thread,
-      updatedAt: Date.now(),
-      messages: [...thread.messages, { id: streamId, role: 'assistant', type: 'text', content: '' }],
-    }));
 
     const combinedTools: Array<{ type: 'web_search' }> = [];
     if (webAccessEnabled) combinedTools.push({ type: 'web_search' });
@@ -810,6 +813,8 @@ const SidePanel = () => {
           } else {
             upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
           }
+          setIsStreaming(false);
+          setStreamingMessageId(null);
           queueMicrotask(() => inputRef.current?.focus());
         },
         onError: err => {
@@ -872,6 +877,8 @@ const SidePanel = () => {
                   } else {
                     upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
                   }
+                  setIsStreaming(false);
+                  setStreamingMessageId(null);
                   queueMicrotask(() => inputRef.current?.focus());
                 },
                 onError: () => {
@@ -884,6 +891,7 @@ const SidePanel = () => {
                       m.id === streamId && m.type === 'text' ? { ...m, content } : m,
                     ),
                   }));
+                  setIsStreaming(false);
                   queueMicrotask(() => inputRef.current?.focus());
                 },
               },
@@ -912,8 +920,14 @@ const SidePanel = () => {
                     ),
                   );
                 },
-                onDone: () => undefined,
-                onError: () => undefined,
+                onDone: () => {
+                  setIsStreaming(false);
+                  setStreamingMessageId(null);
+                },
+                onError: () => {
+                  setIsStreaming(false);
+                  setStreamingMessageId(null);
+                },
               },
             );
             return;
@@ -925,6 +939,8 @@ const SidePanel = () => {
             updatedAt: Date.now(),
             messages: thread.messages.map(m => (m.id === streamId && m.type === 'text' ? { ...m, content } : m)),
           }));
+          setIsStreaming(false);
+          setStreamingMessageId(null);
           queueMicrotask(() => inputRef.current?.focus());
         },
       },
@@ -1285,6 +1301,8 @@ const SidePanel = () => {
         updatedAt: Date.now(),
         messages: thread.messages.map(m => (m.id === id && m.type === 'text' ? { ...m, content: '' } : m)),
       }));
+      setIsStreaming(true);
+      setStreamingMessageId(id);
 
       const regenTools: Array<{ type: 'web_search' }> = [];
       if (webAccessEnabled) regenTools.push({ type: 'web_search' });
@@ -1338,6 +1356,8 @@ const SidePanel = () => {
             } else {
               upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
             }
+            setIsStreaming(false);
+            setStreamingMessageId(null);
           },
           onError: () => {
             const newContent = uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.';
@@ -1349,6 +1369,8 @@ const SidePanel = () => {
                 m.id === id && m.type === 'text' ? { ...m, content: newContent } : m,
               ),
             }));
+            setIsStreaming(false);
+            setStreamingMessageId(null);
           },
         },
       );
@@ -1802,6 +1824,31 @@ const SidePanel = () => {
                               <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
                                 {normalizeMathDelimiters(m.content)}
                               </ReactMarkdown>
+                              {isStreaming && streamingMessageId === m.id && (
+                                <div className="mt-2 flex items-center gap-2 text-xs opacity-70">
+                                  <svg
+                                    aria-hidden="true"
+                                    className="h-4 w-4 animate-spin"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round">
+                                    <circle
+                                      cx="12"
+                                      cy="12"
+                                      r="9"
+                                      className={cn(isLight ? 'text-slate-300' : 'text-slate-500')}
+                                    />
+                                    <path
+                                      d="M21 12a9 9 0 0 0-9-9"
+                                      className={cn(isLight ? 'text-violet-600' : 'text-violet-400')}
+                                    />
+                                  </svg>
+                                  <span>{uiLocale === 'ru' ? 'Генерирую…' : 'Generating…'}</span>
+                                </div>
+                              )}
                             </div>
                           ) : m.type === 'image' ? (
                             <div
@@ -1922,6 +1969,31 @@ const SidePanel = () => {
                                 <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
                                   {normalizeMathDelimiters(it.content)}
                                 </ReactMarkdown>
+                                {isStreaming && streamingMessageId === it.id && (
+                                  <div className="mt-2 flex items-center gap-2 text-xs opacity-70">
+                                    <svg
+                                      aria-hidden="true"
+                                      className="h-4 w-4 animate-spin"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round">
+                                      <circle
+                                        cx="12"
+                                        cy="12"
+                                        r="9"
+                                        className={cn(isLight ? 'text-slate-300' : 'text-slate-500')}
+                                      />
+                                      <path
+                                        d="M21 12a9 9 0 0 0-9-9"
+                                        className={cn(isLight ? 'text-violet-600' : 'text-violet-400')}
+                                      />
+                                    </svg>
+                                    <span>{uiLocale === 'ru' ? 'Генерирую…' : 'Generating…'}</span>
+                                  </div>
+                                )}
                               </div>
                             ) : it.type === 'image' ? (
                               <div
@@ -2966,10 +3038,12 @@ const SidePanel = () => {
               />
               <button
                 onClick={handleSend}
-                disabled={!canSend}
+                disabled={!canSend || isStreaming}
                 className={cn(
                   'group absolute bottom-2 right-2 inline-flex h-8 w-8 items-center justify-center rounded-md text-sm shadow-sm transition-colors',
-                  canSend ? 'bg-violet-600 text-white hover:bg-violet-700' : 'bg-gray-400 text-white opacity-60',
+                  canSend && !isStreaming
+                    ? 'bg-violet-600 text-white hover:bg-violet-700'
+                    : 'bg-gray-400 text-white opacity-60',
                 )}
                 title={t.send}
                 aria-label={t.send}>
@@ -3000,6 +3074,8 @@ const SidePanel = () => {
           </div>
         )}
       </div>
+
+      {/* (removed) full-screen streaming overlay */}
 
       {/* History bottom sheet */}
       {historySheetOpen && (
