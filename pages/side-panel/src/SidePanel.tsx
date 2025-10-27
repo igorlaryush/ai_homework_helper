@@ -1,8 +1,32 @@
 import '@src/SidePanel.css';
+import 'katex/dist/katex.min.css';
 import { useStorage, withErrorBoundary, withSuspense } from '@extension/shared';
 import { exampleThemeStorage } from '@extension/storage';
 import { cn, ErrorDisplay, LoadingSpinner } from '@extension/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import rehypeKatex from 'rehype-katex';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+
+const normalizeMathDelimiters = (input: string): string => {
+  if (!input) return input;
+  let output = input.replace(/\\\[([\s\S]*?)\\\]/g, (_, inner) => `$$\n${inner}\n$$`);
+  output = output.replace(/\\\(([\s\S]*?)\\\)/g, (_, inner) => `$${inner}$`);
+  const looksLikeMath = /(\\|\^|_|\\frac|\\sum|\\int|\\cdot|\\hat|\\vec|\\nabla|\\sqrt|\\begin|\\end|=)/;
+  output = output.replace(/(^|\n)\s*\[\s*([\s\S]*?)\s*\]\s*(?=\n|$)/g, (m, start, inner) => {
+    if (!looksLikeMath.test(inner)) return m;
+    return `${start}$$\n${inner}\n$$`;
+  });
+  output = output.replace(/\[(.+?)\](?!\(|:)/g, (m, inner, offset) => {
+    const before = output[offset - 3] + output[offset - 2] + output[offset - 1];
+    if (before && (before.endsWith('[ ') || before.endsWith('[x') || before.endsWith('[X'))) return m;
+    if (inner.includes('\n')) return m;
+    if (!looksLikeMath.test(inner)) return m;
+    return `$${inner}$`;
+  });
+  return output;
+};
 
 // Simple UI translations for the side panel (local only)
 const UI_I18N = {
@@ -1775,7 +1799,9 @@ const SidePanel = () => {
                                     ? 'bg-white text-gray-900 ring-1 ring-black/5'
                                     : 'bg-slate-700 text-gray-100 ring-1 ring-white/10',
                               )}>
-                              {m.content}
+                              <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                                {normalizeMathDelimiters(m.content)}
+                              </ReactMarkdown>
                             </div>
                           ) : m.type === 'image' ? (
                             <div
@@ -1893,7 +1919,9 @@ const SidePanel = () => {
                                       ? 'bg-white text-gray-900 ring-1 ring-black/5'
                                       : 'bg-slate-700 text-gray-100 ring-1 ring-white/10',
                                 )}>
-                                {it.content}
+                                <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                                  {normalizeMathDelimiters(it.content)}
+                                </ReactMarkdown>
                               </div>
                             ) : it.type === 'image' ? (
                               <div
