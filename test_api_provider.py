@@ -35,7 +35,7 @@ Examples:
     --extra-path chat/completions \
     --method POST \
     --headers '{"Authorization":"Bearer sk-...","Content-Type":"application/json"}' \
-    --body '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"Hello"}]}'
+    --body '{"model":"gpt-5o-mini","messages":[{"role":"user","content":"Hello"}]}'
 
   # If the gateway requires platform auth (401/403), include your session cookie (from logged-in browser)
   # NOTE: This is only for local testing. Do not hardcode secrets.
@@ -44,7 +44,7 @@ Examples:
     --extra-path chat/completions \
     --method POST \
     --headers '{"Cookie":"__Secure-session=...; other=...","Content-Type":"application/json"}' \
-    --body '{"model":"openai/gpt-4o-mini","messages":[{"role":"user","content":"Hello"}]}'
+    --body '{"model":"openai/gpt-5o-mini","messages":[{"role":"user","content":"Hello"}]}'
 """
 
 from __future__ import annotations

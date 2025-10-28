@@ -103,7 +103,6 @@ const UI_I18N = {
     chip_short: 'Short',
     chip_medium: 'Medium',
     chip_long: 'Long',
-    superAI: 'SuperAI',
   },
   ru: {
     title: 'LLM Чат',
@@ -178,7 +177,6 @@ const UI_I18N = {
     chip_short: 'Short',
     chip_medium: 'Medium',
     chip_long: 'Long',
-    superAI: 'SuperAI',
   },
 } as const;
 
@@ -445,7 +443,6 @@ const SidePanel = () => {
   const [writeTone, setWriteTone] = useState<'auto' | 'formal' | 'professional' | 'funny' | 'casual'>('auto');
   const [writeLength, setWriteLength] = useState<'auto' | 'short' | 'medium' | 'long'>('auto');
   const [writeLanguage, setWriteLanguage] = useState<string>('English');
-  const [writeSuper, setWriteSuper] = useState<boolean>(false);
   const [writeComposeResult, setWriteComposeResult] = useState<string>('');
 
   const [writeReviseInput, setWriteReviseInput] = useState<string>('');
@@ -456,6 +453,11 @@ const SidePanel = () => {
 
   const [writeParaphraseInput, setWriteParaphraseInput] = useState<string>('');
   const [writeParaphraseResult, setWriteParaphraseResult] = useState<string>('');
+  const [writeLangOpen, setWriteLangOpen] = useState<boolean>(false);
+  const [isComposeStreaming, setIsComposeStreaming] = useState<boolean>(false);
+  const [isReviseStreaming, setIsReviseStreaming] = useState<boolean>(false);
+  const [isGrammarStreaming, setIsGrammarStreaming] = useState<boolean>(false);
+  const [isParaphraseStreaming, setIsParaphraseStreaming] = useState<boolean>(false);
 
   // Read mode state
   const [readFiles, setReadFiles] = useState<ReadFileItem[]>([]);
@@ -711,7 +713,7 @@ const SidePanel = () => {
       return;
     }
 
-    const model = llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini';
+    const model = llmModel === 'deep' ? 'gpt-5o' : 'gpt-5o-mini';
     const inputPayload = buildHistoryInputItemsFrom(allMessagesForContext, 5);
 
     // Streaming placeholder message (show immediately)
@@ -918,9 +920,9 @@ const SidePanel = () => {
             );
             return;
           }
-          // Fallback 2: switch to gpt-4o-mini if deep model 403s
-          if (status === 403 && model === 'gpt-4o') {
-            const fallbackModel = 'gpt-4o-mini';
+          // Fallback 2: switch to gpt-5o-mini if deep model 403s
+          if (status === 403 && model === 'gpt-5o') {
+            const fallbackModel = 'gpt-5o-mini';
             void streamResponsesApi(
               {
                 apiKey: key,
@@ -1152,17 +1154,86 @@ const SidePanel = () => {
   );
 
   // Write actions
-  const generateCompose = useCallback(() => {
-    const base = writeComposeInput.trim() || 'Untitled draft';
-    const lines = [
-      `${base}`,
-      '',
-      `Format: ${writeFormat}, Tone: ${writeTone}, Length: ${writeLength}, Language: ${writeLanguage}${writeSuper ? ', SuperAI' : ''}.`,
-      '',
-      'This is a placeholder draft (UI demo). Replace with your LLM call.',
-    ];
-    setWriteComposeResult(lines.join('\n'));
-  }, [writeComposeInput, writeFormat, writeTone, writeLength, writeLanguage, writeSuper]);
+  const generateCompose = useCallback(async () => {
+    if (isComposeStreaming) return;
+    const key = apiKeyInput.trim();
+    if (!key) {
+      setWriteComposeResult(t.missingKey);
+      return;
+    }
+    const base = writeComposeInput.trim() || (uiLocale === 'ru' ? 'Без названия' : 'Untitled draft');
+    const model = llmModel === 'deep' ? 'gpt-5o' : 'gpt-5o-mini';
+    const titleCase = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+    const fmt = titleCase(writeFormat);
+    const tone = titleCase(writeTone);
+    const len = titleCase(writeLength);
+    const lang = writeLanguage;
+    const systemPrompt = `You are EduWriterGPT, an advanced AI writing assistant designed to help students and learners create high-quality written works.
+Your goal is to generate a well-structured and coherent piece of text perfectly suited for academic or personal purposes.
+
+Follow these parameters when generating text:
+- Format: ${fmt}
+- Tone: ${tone}
+- Length: ${len}
+- Language: ${lang}
+- Topic: ${base}
+
+If the user selects "Auto" for any parameter, intelligently determine the most appropriate option based on the topic and context.
+
+Guidelines:
+1. Write as a human would — clear, natural, and contextually appropriate for students or academic readers.
+2. For "Essay" or "Article", include an introduction, body, and conclusion.
+3. For "Email" or "Message", make it concise, polite, and context-aware.
+4. For "Comment" or "Blog", make it engaging and relevant to the topic.
+5. Adjust tone accordingly:
+   - "Formal" → academic, objective, and polite
+   - "Professional" → clear, structured, confident
+   - "Funny" → light, witty, and entertaining
+   - "Casual" → friendly, simple, and conversational
+6. Adjust length:
+   - "Short" → 1–2 short paragraphs
+   - "Medium" → 3–5 paragraphs
+   - "Long" → detailed, 6+ paragraphs or full essay-style
+7. Always keep coherence, grammar correctness, and readability at the highest standard.
+
+Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} length about this topic:
+"${base}"`;
+
+    setWriteComposeResult('');
+    setIsComposeStreaming(true);
+    void streamResponsesApi(
+      {
+        apiKey: key,
+        body: {
+          model,
+          input: [
+            { role: 'system', content: [{ type: 'input_text', text: systemPrompt }] },
+            { role: 'user', content: [{ type: 'input_text', text: base }] },
+          ],
+          text: { format: { type: 'text' } },
+        },
+      },
+      {
+        onDelta: chunk => setWriteComposeResult(prev => (prev ?? '') + chunk),
+        onDone: () => setIsComposeStreaming(false),
+        onError: () => {
+          setWriteComposeResult(uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.');
+          setIsComposeStreaming(false);
+        },
+      },
+    );
+  }, [
+    isComposeStreaming,
+    apiKeyInput,
+    llmModel,
+    uiLocale,
+    t.missingKey,
+    writeComposeInput,
+    writeFormat,
+    writeTone,
+    writeLength,
+    writeLanguage,
+  ]);
 
   const copyText = useCallback(async (text: string) => {
     try {
@@ -1172,25 +1243,131 @@ const SidePanel = () => {
     }
   }, []);
 
-  const optimizeRevise = useCallback(() => {
+  const optimizeRevise = useCallback(async () => {
+    if (isReviseStreaming) return;
     const text = writeReviseInput.trim();
     if (!text) {
       setWriteReviseResult('');
       return;
     }
-    const improved = text.replace(/\s+/g, ' ').replace(/\s([,.!?])/g, '$1');
-    setWriteReviseResult(`${improved}\n\n(UI demo: simple cleanup)${writeSuper ? ' + SuperAI' : ''}`);
-  }, [writeReviseInput, writeSuper]);
+    const key = apiKeyInput.trim();
+    if (!key) {
+      setWriteReviseResult(t.missingKey);
+      return;
+    }
+    const model = llmModel === 'deep' ? 'gpt-5o' : 'gpt-5o-mini';
+    const instruction =
+      uiLocale === 'ru'
+        ? `Улучшай стиль и ясность текста, сохраняя смысл. Язык: ${writeLanguage}. Тон: ${writeTone}. Верни только улучшенный текст без пояснений.`
+        : `Improve style and clarity while preserving meaning. Language: ${writeLanguage}. Tone: ${writeTone}. Return only the improved text without explanations.`;
+    setWriteReviseResult('');
+    setIsReviseStreaming(true);
+    void streamResponsesApi(
+      {
+        apiKey: key,
+        body: {
+          model,
+          input: [
+            { role: 'user', content: [{ type: 'input_text', text: instruction }] },
+            { role: 'user', content: [{ type: 'input_text', text }] },
+          ],
+          text: { format: { type: 'text' } },
+        },
+      },
+      {
+        onDelta: chunk => setWriteReviseResult(prev => (prev ?? '') + chunk),
+        onDone: () => setIsReviseStreaming(false),
+        onError: () => {
+          setWriteReviseResult(uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.');
+          setIsReviseStreaming(false);
+        },
+      },
+    );
+  }, [isReviseStreaming, apiKeyInput, llmModel, uiLocale, t.missingKey, writeReviseInput, writeLanguage, writeTone]);
 
-  const runGrammar = useCallback(() => {
+  const runGrammar = useCallback(async () => {
+    if (isGrammarStreaming) return;
     const text = writeGrammarInput.trim();
-    setWriteGrammarResult(text ? 'UI demo: grammar suggestions will appear here.' : '');
-  }, [writeGrammarInput]);
+    if (!text) {
+      setWriteGrammarResult('');
+      return;
+    }
+    const key = apiKeyInput.trim();
+    if (!key) {
+      setWriteGrammarResult(t.missingKey);
+      return;
+    }
+    const model = llmModel === 'deep' ? 'gpt-5o' : 'gpt-5o-mini';
+    const instruction =
+      uiLocale === 'ru'
+        ? 'Исправь грамматику и орфографию. Верни только исправленный текст без пояснений.'
+        : 'Fix grammar and spelling. Return only the corrected text without explanations.';
+    setWriteGrammarResult('');
+    setIsGrammarStreaming(true);
+    void streamResponsesApi(
+      {
+        apiKey: key,
+        body: {
+          model,
+          input: [
+            { role: 'user', content: [{ type: 'input_text', text: instruction }] },
+            { role: 'user', content: [{ type: 'input_text', text }] },
+          ],
+          text: { format: { type: 'text' } },
+        },
+      },
+      {
+        onDelta: chunk => setWriteGrammarResult(prev => (prev ?? '') + chunk),
+        onDone: () => setIsGrammarStreaming(false),
+        onError: () => {
+          setWriteGrammarResult(uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.');
+          setIsGrammarStreaming(false);
+        },
+      },
+    );
+  }, [isGrammarStreaming, apiKeyInput, llmModel, uiLocale, t.missingKey, writeGrammarInput]);
 
-  const runParaphrase = useCallback(() => {
+  const runParaphrase = useCallback(async () => {
+    if (isParaphraseStreaming) return;
     const text = writeParaphraseInput.trim();
-    setWriteParaphraseResult(text ? 'UI demo: paraphrased text will appear here.' : '');
-  }, [writeParaphraseInput]);
+    if (!text) {
+      setWriteParaphraseResult('');
+      return;
+    }
+    const key = apiKeyInput.trim();
+    if (!key) {
+      setWriteParaphraseResult(t.missingKey);
+      return;
+    }
+    const model = llmModel === 'deep' ? 'gpt-5o' : 'gpt-5o-mini';
+    const instruction =
+      uiLocale === 'ru'
+        ? `Перефразируй текст, сохраняя смысл. Язык: ${writeLanguage}. Верни только перефразированный текст.`
+        : `Paraphrase the text while preserving meaning. Language: ${writeLanguage}. Return only the paraphrased text.`;
+    setWriteParaphraseResult('');
+    setIsParaphraseStreaming(true);
+    void streamResponsesApi(
+      {
+        apiKey: key,
+        body: {
+          model,
+          input: [
+            { role: 'user', content: [{ type: 'input_text', text: instruction }] },
+            { role: 'user', content: [{ type: 'input_text', text }] },
+          ],
+          text: { format: { type: 'text' } },
+        },
+      },
+      {
+        onDelta: chunk => setWriteParaphraseResult(prev => (prev ?? '') + chunk),
+        onDone: () => setIsParaphraseStreaming(false),
+        onError: () => {
+          setWriteParaphraseResult(uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.');
+          setIsParaphraseStreaming(false);
+        },
+      },
+    );
+  }, [isParaphraseStreaming, apiKeyInput, llmModel, uiLocale, t.missingKey, writeParaphraseInput, writeLanguage]);
 
   const acceptDroppedFiles = useCallback((files: File[]) => {
     const pdfs = files.filter(
@@ -1370,7 +1547,7 @@ const SidePanel = () => {
         return;
       }
       const model =
-        (lastRequestRef.current?.model as string | undefined) ?? (llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini');
+        (lastRequestRef.current?.model as string | undefined) ?? (llmModel === 'deep' ? 'gpt-5o' : 'gpt-5o-mini');
       const historyInput = buildHistoryInputItemsBeforeMessage(id, 5);
       let inputPayload: unknown = null;
       if (historyInput.length > 0) inputPayload = historyInput;
@@ -2717,41 +2894,73 @@ const SidePanel = () => {
                       </div>
                     </div>
 
-                    {/* Language + SuperAI */}
+                    {/* Language */}
                     <div className="flex items-center gap-4">
                       <div>
                         <div className="mb-1 text-sm font-semibold">{t.write_language}</div>
-                        <div className="inline-flex items-center gap-2">
-                          <span
-                            className={cn('rounded-full px-3 py-1 text-sm', isLight ? 'bg-slate-200' : 'bg-slate-700')}>
-                            {writeLanguage}
-                          </span>
+                        <div
+                          className="relative inline-block"
+                          onBlur={e => {
+                            if (!e.currentTarget.contains(e.relatedTarget as Node)) setWriteLangOpen(false);
+                          }}>
                           <button
-                            onClick={() => setWriteLanguage(writeLanguage === 'English' ? 'English' : 'English')}
+                            onClick={() => setWriteLangOpen(v => !v)}
+                            onBlur={() => {
+                              // Ensure button blur to menu doesn't close immediately; menu wrapper handles outside blur
+                            }}
                             className={cn(
-                              'rounded px-2 py-1 text-sm',
+                              'inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm',
                               isLight ? 'bg-slate-200 hover:bg-slate-300' : 'bg-slate-700 hover:bg-slate-600',
-                            )}>
-                            …
+                            )}
+                            aria-haspopup="listbox"
+                            aria-expanded={writeLangOpen}
+                            aria-label={t.write_language}
+                            title={t.write_language}>
+                            <span>{writeLanguage}</span>
+                            <span aria-hidden>▾</span>
                           </button>
-                        </div>
-                      </div>
-                      <div className="ml-auto inline-flex items-center gap-2">
-                        <span className="text-sm opacity-80">{t.superAI}</span>
-                        <button
-                          onClick={() => setWriteSuper(v => !v)}
-                          aria-pressed={writeSuper}
-                          className={cn(
-                            'h-6 w-10 rounded-full border transition-colors',
-                            writeSuper
-                              ? 'border-violet-500 bg-violet-600'
-                              : isLight
-                                ? 'border-slate-300 bg-slate-200'
-                                : 'border-slate-600 bg-slate-700',
+                          {writeLangOpen && (
+                            <div
+                              className={cn(
+                                'absolute z-20 mt-2 w-56 overflow-hidden rounded-md border text-sm shadow-lg',
+                                isLight
+                                  ? 'border-slate-200 bg-white text-gray-900'
+                                  : 'border-slate-700 bg-slate-800 text-gray-100',
+                              )}
+                              role="listbox">
+                              <button
+                                onClick={() => {
+                                  setWriteLanguage('English');
+                                  setWriteLangOpen(false);
+                                }}
+                                role="option"
+                                aria-selected={writeLanguage === 'English'}
+                                className={cn(
+                                  'flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-slate-100 focus:bg-slate-100 dark:hover:bg-slate-700 dark:focus:bg-slate-700',
+                                  writeLanguage === 'English' ? 'font-semibold' : undefined,
+                                )}>
+                                <span>🇺🇸</span>
+                                <span className="flex-1">{t.lang_en}</span>
+                                {writeLanguage === 'English' && <span aria-hidden>✓</span>}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setWriteLanguage('Russian');
+                                  setWriteLangOpen(false);
+                                }}
+                                role="option"
+                                aria-selected={writeLanguage === 'Russian'}
+                                className={cn(
+                                  'flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-slate-100 focus:bg-slate-100 dark:hover:bg-slate-700 dark:focus:bg-slate-700',
+                                  writeLanguage === 'Russian' ? 'font-semibold' : undefined,
+                                )}>
+                                <span>🇷🇺</span>
+                                <span className="flex-1">{t.lang_ru}</span>
+                                {writeLanguage === 'Russian' && <span aria-hidden>✓</span>}
+                              </button>
+                            </div>
                           )}
-                          title={t.superAI}
-                          aria-label={t.superAI}
-                        />
+                        </div>
                       </div>
                     </div>
 
@@ -2827,24 +3036,7 @@ const SidePanel = () => {
                         isLight ? 'border-slate-300 bg-white' : 'border-slate-700 bg-slate-800',
                       )}
                     />
-                    <div className="flex items-center justify-between">
-                      <div className="inline-flex items-center gap-2">
-                        <span className="text-sm opacity-80">{t.superAI}</span>
-                        <button
-                          onClick={() => setWriteSuper(v => !v)}
-                          aria-pressed={writeSuper}
-                          className={cn(
-                            'h-6 w-10 rounded-full border transition-colors',
-                            writeSuper
-                              ? 'border-violet-500 bg-violet-600'
-                              : isLight
-                                ? 'border-slate-300 bg-slate-200'
-                                : 'border-slate-600 bg-slate-700',
-                          )}
-                          title={t.superAI}
-                          aria-label={t.superAI}
-                        />
-                      </div>
+                    <div className="flex items-center justify-end">
                       <button
                         onClick={optimizeRevise}
                         className={cn(
