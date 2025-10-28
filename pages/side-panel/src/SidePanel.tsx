@@ -46,6 +46,8 @@ const UI_I18N = {
     lang_ru: 'Russian (Русский)',
     history: 'History',
     delete: 'Delete',
+    edit: 'Edit',
+    cancel: 'Cancel',
     deleteChat: 'Delete chat',
     confirmDeleteChat: 'Delete this chat?',
     noChats: 'No chats yet',
@@ -117,6 +119,8 @@ const UI_I18N = {
     lang_ru: 'Russian (Русский)',
     history: 'История',
     delete: 'Удалить',
+    edit: 'Редактировать',
+    cancel: 'Отмена',
     deleteChat: 'Удалить чат',
     confirmDeleteChat: 'Удалить этот чат?',
     noChats: 'Чатов пока нет',
@@ -420,6 +424,9 @@ const SidePanel = () => {
 
   const [uiLocale, setUiLocale] = useState<'en' | 'ru'>('en');
   const [langOpen, setLangOpen] = useState<boolean>(false);
+  // Editing state for user messages
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState<string>('');
   const [mode, setMode] = useState<'ask' | 'read' | 'write'>('ask');
   const [writeTab, setWriteTab] = useState<'compose' | 'revise' | 'grammar' | 'paraphrase'>('compose');
   const lastResponseIdRef = useRef<string | null>(null);
@@ -456,11 +463,18 @@ const SidePanel = () => {
   const imageActiveTimeoutRef = useRef<number | undefined>(undefined);
   const fileActiveTimeoutRef = useRef<number | undefined>(undefined);
   const readFileInputRef = useRef<HTMLInputElement | null>(null);
+  const editingTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   // In-memory map of attachment id -> File object for uploads
   const attachmentFileMapRef = useRef<Record<string, File>>({});
 
   const t = UI_I18N[uiLocale];
   const headerTitle = mode === 'ask' ? t.title : mode === 'read' ? t.nav_read : t.nav_write;
+
+  useEffect(() => {
+    if (editingMessageId) {
+      queueMicrotask(() => editingTextareaRef.current?.focus());
+    }
+  }, [editingMessageId]);
 
   // Avatars for assistant and user
   const BotAvatar = () => (
@@ -1245,8 +1259,12 @@ const SidePanel = () => {
         updatedAt: Date.now(),
         messages: thread.messages.filter(m => m.id !== id),
       }));
+      if (editingMessageId === id) {
+        setEditingMessageId(null);
+        setEditingText('');
+      }
     },
-    [upsertActiveThread],
+    [upsertActiveThread, editingMessageId],
   );
 
   // Delete grouped messages by batchId
@@ -1258,8 +1276,15 @@ const SidePanel = () => {
         updatedAt: Date.now(),
         messages: thread.messages.filter(m => m.batchId !== batchId),
       }));
+      if (editingMessageId) {
+        const stillEditingDeleted = messages.find(m => m.id === editingMessageId)?.batchId === batchId;
+        if (stillEditingDeleted) {
+          setEditingMessageId(null);
+          setEditingText('');
+        }
+      }
     },
-    [upsertActiveThread],
+    [upsertActiveThread, editingMessageId, messages],
   );
 
   // Regenerate assistant text message via API
@@ -1386,6 +1411,43 @@ const SidePanel = () => {
       messages,
     ],
   );
+
+  // Start editing a user text message
+  const startEditMessage = useCallback(
+    (id: string) => {
+      const msg = messages.find(m => m.id === id);
+      if (!msg || msg.role !== 'user' || msg.type !== 'text') return;
+      setEditingMessageId(id);
+      setEditingText(msg.content);
+    },
+    [messages],
+  );
+
+  // Cancel message editing
+  const cancelEditMessage = useCallback(() => {
+    setEditingMessageId(null);
+    setEditingText('');
+  }, []);
+
+  // Save edited message content
+  const saveEditMessage = useCallback(() => {
+    if (!editingMessageId) return;
+    const trimmed = editingText.trim();
+    setMessages(prev =>
+      prev.map(m =>
+        m.id === editingMessageId && m.role === 'user' && m.type === 'text' ? { ...m, content: trimmed } : m,
+      ),
+    );
+    upsertActiveThread(thread => ({
+      ...thread,
+      updatedAt: Date.now(),
+      messages: thread.messages.map(m =>
+        m.id === editingMessageId && m.role === 'user' && m.type === 'text' ? { ...m, content: trimmed } : m,
+      ),
+    }));
+    setEditingMessageId(null);
+    setEditingText('');
+  }, [editingMessageId, editingText, upsertActiveThread]);
 
   // Delete thread with confirmation
   const deleteThread = useCallback(
@@ -1821,9 +1883,31 @@ const SidePanel = () => {
                                     ? 'bg-white text-gray-900 ring-1 ring-black/5'
                                     : 'bg-slate-700 text-gray-100 ring-1 ring-white/10',
                               )}>
-                              <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
-                                {normalizeMathDelimiters(m.content)}
-                              </ReactMarkdown>
+                              {editingMessageId === m.id && m.role === 'user' ? (
+                                <textarea
+                                  value={editingText}
+                                  onChange={e => setEditingText(e.target.value)}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                      e.preventDefault();
+                                      saveEditMessage();
+                                    } else if (e.key === 'Escape') {
+                                      e.preventDefault();
+                                      cancelEditMessage();
+                                    }
+                                  }}
+                                  rows={Math.min(10, Math.max(3, editingText.split('\n').length))}
+                                  className={cn(
+                                    'w-full resize-y rounded-md bg-transparent outline-none placeholder:opacity-60',
+                                    m.role === 'user' ? 'text-white' : undefined,
+                                  )}
+                                  ref={editingTextareaRef}
+                                />
+                              ) : (
+                                <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                                  {normalizeMathDelimiters(m.content)}
+                                </ReactMarkdown>
+                              )}
                               {isStreaming && streamingMessageId === m.id && (
                                 <div className="mt-2 flex items-center gap-2 text-xs opacity-70">
                                   <svg
@@ -1916,6 +2000,43 @@ const SidePanel = () => {
                               </button>
                             </>
                           )}
+                          {m.role === 'user' &&
+                            m.type === 'text' &&
+                            (editingMessageId === m.id ? (
+                              <>
+                                <button
+                                  onClick={saveEditMessage}
+                                  className={cn(
+                                    'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
+                                    isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
+                                  )}
+                                  title={t.save}
+                                  aria-label={t.save}>
+                                  {t.save}
+                                </button>
+                                <button
+                                  onClick={cancelEditMessage}
+                                  className={cn(
+                                    'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
+                                    isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
+                                  )}
+                                  title={t.cancel}
+                                  aria-label={t.cancel}>
+                                  {t.cancel}
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                onClick={() => startEditMessage(m.id)}
+                                className={cn(
+                                  'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
+                                  isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
+                                )}
+                                title={t.edit}
+                                aria-label={t.edit}>
+                                ✎
+                              </button>
+                            ))}
                           <button
                             onClick={() => deleteMessage(m.id)}
                             className={cn(
@@ -1966,9 +2087,31 @@ const SidePanel = () => {
                                       ? 'bg-white text-gray-900 ring-1 ring-black/5'
                                       : 'bg-slate-700 text-gray-100 ring-1 ring-white/10',
                                 )}>
-                                <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
-                                  {normalizeMathDelimiters(it.content)}
-                                </ReactMarkdown>
+                                {editingMessageId === it.id && role === 'user' ? (
+                                  <textarea
+                                    value={editingText}
+                                    onChange={e => setEditingText(e.target.value)}
+                                    onKeyDown={e => {
+                                      if (e.key === 'Enter' && !e.shiftKey) {
+                                        e.preventDefault();
+                                        saveEditMessage();
+                                      } else if (e.key === 'Escape') {
+                                        e.preventDefault();
+                                        cancelEditMessage();
+                                      }
+                                    }}
+                                    rows={Math.min(10, Math.max(3, editingText.split('\n').length))}
+                                    className={cn(
+                                      'w-full resize-y rounded-md bg-transparent outline-none placeholder:opacity-60',
+                                      role === 'user' ? 'text-white' : undefined,
+                                    )}
+                                    ref={editingTextareaRef}
+                                  />
+                                ) : (
+                                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                                    {normalizeMathDelimiters(it.content)}
+                                  </ReactMarkdown>
+                                )}
                                 {isStreaming && streamingMessageId === it.id && (
                                   <div className="mt-2 flex items-center gap-2 text-xs opacity-70">
                                     <svg
@@ -2029,6 +2172,46 @@ const SidePanel = () => {
                           'mt-1 flex items-center gap-2 text-xs',
                           role === 'user' ? 'justify-end' : 'justify-start',
                         )}>
+                        {role === 'user' &&
+                          (editingMessageId && block.items.some(it => it.id === editingMessageId) ? (
+                            <>
+                              <button
+                                onClick={saveEditMessage}
+                                className={cn(
+                                  'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
+                                  isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
+                                )}
+                                title={t.save}
+                                aria-label={t.save}>
+                                {t.save}
+                              </button>
+                              <button
+                                onClick={cancelEditMessage}
+                                className={cn(
+                                  'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
+                                  isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
+                                )}
+                                title={t.cancel}
+                                aria-label={t.cancel}>
+                                {t.cancel}
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                // Prefer edit the first text item within group
+                                const firstText = block.items.find(x => x.type === 'text');
+                                if (firstText) startEditMessage(firstText.id);
+                              }}
+                              className={cn(
+                                'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
+                                isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
+                              )}
+                              title={t.edit}
+                              aria-label={t.edit}>
+                              ✎
+                            </button>
+                          ))}
                         <button
                           onClick={() => deleteMessageGroup(block.batchId)}
                           className={cn(
