@@ -74,6 +74,8 @@ const UI_I18N = {
     read_recent: 'Recent Files:',
     read_view: 'View',
     read_delete: 'Delete',
+    read_chat: 'Chat',
+    read_chat_prompt: 'Summarize this PDF.',
     write_compose: 'Compose',
     write_revise: 'Revise',
     write_grammar: 'Grammar check',
@@ -147,6 +149,8 @@ const UI_I18N = {
     read_recent: 'Недавние файлы:',
     read_view: 'Открыть',
     read_delete: 'Удалить',
+    read_chat: 'Чат',
+    read_chat_prompt: 'Кратко перескажи этот PDF.',
     write_compose: 'Compose',
     write_revise: 'Revise',
     write_grammar: 'Проверка грамматики',
@@ -197,6 +201,8 @@ type ChatThread = {
   createdAt: number;
   updatedAt: number;
   lastResponseId?: string;
+  // optional link to a PDF from Read section that this chat is about
+  linkedPdfId?: string;
   messages: ChatMessage[];
 };
 
@@ -974,6 +980,12 @@ const SidePanel = () => {
     buildHistoryInputItemsFrom,
   ]);
 
+  // Keep a stable reference to the latest handleSend to invoke after async state updates
+  const handleSendRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    handleSendRef.current = handleSend;
+  }, [handleSend]);
+
   const onKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (event.key === 'Enter' && !event.shiftKey) {
@@ -1084,6 +1096,52 @@ const SidePanel = () => {
       // ignore
     }
   }, []);
+
+  // Read: open or create chat for a given PDF and switch to Ask AI
+  const openChatWithPdf = useCallback(
+    async (item: ReadFileItem) => {
+      const existing = threads.find(tn => tn.linkedPdfId === item.id);
+      const prompt = t.read_chat_prompt;
+
+      if (existing) {
+        setActiveId(existing.id);
+        setMessages(existing.messages);
+        setMode('ask');
+        return;
+      }
+
+      const id = `chat-${Date.now()}`;
+      const initial: ChatThread = {
+        id,
+        title: item.name.slice(0, 40),
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        linkedPdfId: item.id,
+        messages: [initialAssistant],
+      };
+
+      setThreads(prev => [initial, ...prev]);
+      setActiveId(id);
+      setMessages(initial.messages);
+      setMode('ask');
+
+      try {
+        const res = await fetch(item.dataUrl);
+        const blob = await res.blob();
+        const file = new File([blob], item.name || 'document.pdf', { type: blob.type || 'application/pdf' });
+        const attachId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        attachmentFileMapRef.current[attachId] = file;
+        setAttachments([{ id: attachId, kind: 'file', name: file.name, size: file.size, mime: file.type }]);
+        setInput(prompt);
+        window.setTimeout(() => {
+          handleSendRef.current();
+        }, 0);
+      } catch {
+        // ignore failures to auto-attach; user can still chat manually
+      }
+    },
+    [threads, t.read_chat_prompt, handleSend],
+  );
 
   const deletePdf = useCallback(
     (id: string) => {
@@ -2502,6 +2560,18 @@ const SidePanel = () => {
                             aria-label={t.read_view}
                             title={t.read_view}>
                             {t.read_view}
+                          </button>
+                          <button
+                            onClick={() => openChatWithPdf(item)}
+                            className={cn(
+                              'rounded-md px-3 py-1 text-sm font-medium',
+                              isLight
+                                ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                : 'bg-emerald-600 text-white hover:bg-emerald-500',
+                            )}
+                            aria-label={t.read_chat}
+                            title={t.read_chat}>
+                            {t.read_chat}
                           </button>
                           <button
                             onClick={() => deletePdf(item.id)}
