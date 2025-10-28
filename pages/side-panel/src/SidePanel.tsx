@@ -36,7 +36,7 @@ const UI_I18N = {
     toggleTheme: 'Toggle theme',
     screenshot: 'Screenshot',
     uploadImage: 'Upload image',
-    uploadFile: 'Upload file',
+    uploadFile: 'Upload PDF',
     newChat: 'New chat',
     removeAttachment: 'Remove attachment',
     placeholder: 'Type a message... (Enter — send, Shift+Enter — new line)',
@@ -109,7 +109,7 @@ const UI_I18N = {
     toggleTheme: 'Сменить тему',
     screenshot: 'Скриншот',
     uploadImage: 'Загрузить изображение',
-    uploadFile: 'Загрузить файл',
+    uploadFile: 'Загрузить PDF',
     newChat: 'Новый чат',
     removeAttachment: 'Удалить вложение',
     placeholder: 'Введите сообщение... (Enter — отправить, Shift+Enter — новая строка)',
@@ -157,7 +157,7 @@ const UI_I18N = {
     write_language: 'Язык',
     write_generate: 'Сгенерировать черновик',
     write_ai_optimize: 'AI Оптимизация',
-    write_regenerate: 'Ещё раз',
+    write_regenerate: 'Перегенерировать',
     write_copy: 'Копировать',
     write_result: 'Результат',
     chip_auto: 'Auto',
@@ -1033,10 +1033,14 @@ const SidePanel = () => {
     setFileActive(false);
 
     const files = Array.from(event.target.files ?? []);
-    if (files.length === 0) return;
+    const pdfFiles = files.filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+    if (pdfFiles.length === 0) {
+      event.target.value = '';
+      return;
+    }
     const baseTime = Date.now();
     setAttachments(prev => {
-      const newItems = files.map((f, idx) => {
+      const newItems = pdfFiles.map((f, idx) => {
         const id = `${baseTime}-${prev.length + idx}`;
         // Track file object for later upload
         attachmentFileMapRef.current[id] = f;
@@ -1045,7 +1049,7 @@ const SidePanel = () => {
           kind: 'file' as const,
           name: f.name,
           size: f.size,
-          mime: f.type || 'application/octet-stream',
+          mime: 'application/pdf',
         };
       });
       return [...prev, ...newItems];
@@ -1642,8 +1646,11 @@ const SidePanel = () => {
     const genericFiles: File[] = [];
     const imageFiles: File[] = [];
     for (const f of files) {
-      if (f.type.startsWith('image/')) imageFiles.push(f);
-      else genericFiles.push(f);
+      if (f.type.startsWith('image/')) {
+        imageFiles.push(f);
+      } else if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) {
+        genericFiles.push(f);
+      }
     }
 
     if (genericFiles.length > 0) {
@@ -1657,7 +1664,7 @@ const SidePanel = () => {
             kind: 'file' as const,
             name: f.name,
             size: f.size,
-            mime: f.type || 'application/octet-stream',
+            mime: 'application/pdf',
           };
         });
         return [...prev, ...newItems];
@@ -1672,6 +1679,39 @@ const SidePanel = () => {
       };
       reader.readAsDataURL(img);
     }
+  }, []);
+
+  // Tooltip positioning within viewport
+  const repositionTooltip = useCallback((container: HTMLElement) => {
+    const tooltip = container.querySelector('[data-tooltip="true"]') as HTMLElement | null;
+    if (!tooltip) return;
+    // Reset to default center first
+    tooltip.style.transform = '';
+    window.requestAnimationFrame(() => {
+      const rect = tooltip.getBoundingClientRect();
+      const margin = 8;
+      let shift = 0;
+      if (rect.left < margin) {
+        shift = margin - rect.left;
+      } else if (rect.right > window.innerWidth - margin) {
+        shift = window.innerWidth - margin - rect.right;
+      }
+      tooltip.style.transform = shift !== 0 ? `translateX(calc(-50% + ${shift}px))` : '';
+    });
+  }, []);
+
+  const onTooltipEnter = useCallback(
+    (e: React.MouseEvent<HTMLSpanElement> | React.FocusEvent<HTMLSpanElement>) => {
+      repositionTooltip(e.currentTarget as unknown as HTMLElement);
+    },
+    [repositionTooltip],
+  );
+
+  const onTooltipLeave = useCallback((e: React.MouseEvent<HTMLSpanElement> | React.FocusEvent<HTMLSpanElement>) => {
+    const tooltip = (e.currentTarget as unknown as HTMLElement).querySelector(
+      '[data-tooltip="true"]',
+    ) as HTMLElement | null;
+    if (tooltip) tooltip.style.transform = '';
   }, []);
 
   return (
@@ -1966,104 +2006,200 @@ const SidePanel = () => {
                           )}>
                           {m.role === 'assistant' && m.type === 'text' && (
                             <>
-                              <button
-                                onClick={() => regenerateAssistantMessage(m.id)}
-                                className={cn(
-                                  'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
-                                  isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
-                                )}
-                                title={t.write_regenerate}
-                                aria-label={t.write_regenerate}>
-                                ↻
-                              </button>
-                              <button
-                                onClick={() => copyText(m.content)}
-                                className={cn(
-                                  'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
-                                  isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
-                                )}
-                                title={t.write_copy}
-                                aria-label={t.write_copy}>
-                                <svg
-                                  aria-hidden="true"
-                                  width="16"
-                                  height="16"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round">
-                                  <rect x="9" y="9" width="13" height="13" rx="2" />
-                                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                                </svg>
-                              </button>
+                              <span
+                                className="group/regenerate relative inline-block"
+                                onMouseEnter={onTooltipEnter}
+                                onFocus={onTooltipEnter}
+                                onMouseLeave={onTooltipLeave}
+                                onBlur={onTooltipLeave}>
+                                <button
+                                  onClick={() => regenerateAssistantMessage(m.id)}
+                                  className={cn(
+                                    'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
+                                    isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
+                                  )}
+                                  title={t.write_regenerate}
+                                  aria-label={t.write_regenerate}>
+                                  ↻
+                                </button>
+                                <span
+                                  className={cn(
+                                    'pointer-events-none absolute -top-8 left-1/2 z-50 max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden whitespace-nowrap rounded px-2 py-1 text-[10px] opacity-0 transition-opacity',
+                                    isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
+                                    'group-focus-within/regenerate:opacity-100 group-hover/regenerate:opacity-100',
+                                  )}
+                                  data-tooltip="true">
+                                  {t.write_regenerate}
+                                </span>
+                              </span>
+                              <span
+                                className="group/copy relative inline-block"
+                                onMouseEnter={onTooltipEnter}
+                                onFocus={onTooltipEnter}
+                                onMouseLeave={onTooltipLeave}
+                                onBlur={onTooltipLeave}>
+                                <button
+                                  onClick={() => copyText(m.content)}
+                                  className={cn(
+                                    'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
+                                    isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
+                                  )}
+                                  title={t.write_copy}
+                                  aria-label={t.write_copy}>
+                                  <svg
+                                    aria-hidden="true"
+                                    width="16"
+                                    height="16"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round">
+                                    <rect x="9" y="9" width="13" height="13" rx="2" />
+                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                  </svg>
+                                </button>
+                                <span
+                                  className={cn(
+                                    'pointer-events-none absolute -top-8 left-1/2 z-50 max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden whitespace-nowrap rounded px-2 py-1 text-[10px] opacity-0 transition-opacity',
+                                    isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
+                                    'group-focus-within/copy:opacity-100 group-hover/copy:opacity-100',
+                                  )}
+                                  data-tooltip="true">
+                                  {t.write_copy}
+                                </span>
+                              </span>
                             </>
                           )}
                           {m.role === 'user' &&
                             m.type === 'text' &&
                             (editingMessageId === m.id ? (
                               <>
-                                <button
-                                  onClick={saveEditMessage}
-                                  className={cn(
-                                    'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
-                                    isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
-                                  )}
-                                  title={t.save}
-                                  aria-label={t.save}>
-                                  {t.save}
-                                </button>
-                                <button
-                                  onClick={cancelEditMessage}
-                                  className={cn(
-                                    'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
-                                    isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
-                                  )}
-                                  title={t.cancel}
-                                  aria-label={t.cancel}>
-                                  {t.cancel}
-                                </button>
+                                <span
+                                  className="group/save relative inline-block"
+                                  onMouseEnter={onTooltipEnter}
+                                  onFocus={onTooltipEnter}
+                                  onMouseLeave={onTooltipLeave}
+                                  onBlur={onTooltipLeave}>
+                                  <button
+                                    onClick={saveEditMessage}
+                                    className={cn(
+                                      'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
+                                      isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
+                                    )}
+                                    title={t.save}
+                                    aria-label={t.save}>
+                                    {t.save}
+                                  </button>
+                                  <span
+                                    className={cn(
+                                      'pointer-events-none absolute -top-8 left-1/2 z-50 max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden whitespace-nowrap rounded px-2 py-1 text-[10px] opacity-0 transition-opacity',
+                                      isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
+                                      'group-focus-within/save:opacity-100 group-hover/save:opacity-100',
+                                    )}
+                                    data-tooltip="true">
+                                    {t.save}
+                                  </span>
+                                </span>
+                                <span
+                                  className="group/cancel relative inline-block"
+                                  onMouseEnter={onTooltipEnter}
+                                  onFocus={onTooltipEnter}
+                                  onMouseLeave={onTooltipLeave}
+                                  onBlur={onTooltipLeave}>
+                                  <button
+                                    onClick={cancelEditMessage}
+                                    className={cn(
+                                      'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
+                                      isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
+                                    )}
+                                    title={t.cancel}
+                                    aria-label={t.cancel}>
+                                    {t.cancel}
+                                  </button>
+                                  <span
+                                    className={cn(
+                                      'pointer-events-none absolute -top-8 left-1/2 z-50 max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden whitespace-nowrap rounded px-2 py-1 text-[10px] opacity-0 transition-opacity',
+                                      isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
+                                      'group-focus-within/cancel:opacity-100 group-hover/cancel:opacity-100',
+                                    )}
+                                    data-tooltip="true">
+                                    {t.cancel}
+                                  </span>
+                                </span>
                               </>
                             ) : (
-                              <button
-                                onClick={() => startEditMessage(m.id)}
-                                className={cn(
-                                  'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
-                                  isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
-                                )}
-                                title={t.edit}
-                                aria-label={t.edit}>
-                                ✎
-                              </button>
+                              <span
+                                className="group/edit relative inline-block"
+                                onMouseEnter={onTooltipEnter}
+                                onFocus={onTooltipEnter}
+                                onMouseLeave={onTooltipLeave}
+                                onBlur={onTooltipLeave}>
+                                <button
+                                  onClick={() => startEditMessage(m.id)}
+                                  className={cn(
+                                    'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
+                                    isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
+                                  )}
+                                  title={t.edit}
+                                  aria-label={t.edit}>
+                                  ✎
+                                </button>
+                                <span
+                                  className={cn(
+                                    'pointer-events-none absolute -top-8 left-1/2 z-50 max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden whitespace-nowrap rounded px-2 py-1 text-[10px] opacity-0 transition-opacity',
+                                    isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
+                                    'group-focus-within/edit:opacity-100 group-hover/edit:opacity-100',
+                                  )}
+                                  data-tooltip="true">
+                                  {t.edit}
+                                </span>
+                              </span>
                             ))}
-                          <button
-                            onClick={() => deleteMessage(m.id)}
-                            className={cn(
-                              'rounded-md p-1 text-gray-400 transition-colors',
-                              isLight
-                                ? 'hover:bg-slate-200 hover:text-red-600'
-                                : 'hover:bg-slate-700 hover:text-red-600',
-                            )}
-                            title={t.delete}
-                            aria-label={t.delete}>
-                            <svg
-                              aria-hidden="true"
-                              width="16"
-                              height="16"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round">
-                              <path d="M3 6h18" />
-                              <path d="M8 6V4h8v2" />
-                              <path d="M19 6l-1 14H6L5 6" />
-                              <path d="M10 11v6" />
-                              <path d="M14 11v6" />
-                            </svg>
-                          </button>
+                          <span
+                            className="group/delete relative inline-block"
+                            onMouseEnter={onTooltipEnter}
+                            onFocus={onTooltipEnter}
+                            onMouseLeave={onTooltipLeave}
+                            onBlur={onTooltipLeave}>
+                            <button
+                              onClick={() => deleteMessage(m.id)}
+                              className={cn(
+                                'rounded-md p-1 text-gray-400 transition-colors',
+                                isLight
+                                  ? 'hover:bg-slate-200 hover:text-red-600'
+                                  : 'hover:bg-slate-700 hover:text-red-600',
+                              )}
+                              title={t.delete}
+                              aria-label={t.delete}>
+                              <svg
+                                aria-hidden="true"
+                                width="16"
+                                height="16"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round">
+                                <path d="M3 6h18" />
+                                <path d="M8 6V4h8v2" />
+                                <path d="M19 6l-1 14H6L5 6" />
+                                <path d="M10 11v6" />
+                                <path d="M14 11v6" />
+                              </svg>
+                            </button>
+                            <span
+                              className={cn(
+                                'pointer-events-none absolute -top-8 left-1/2 z-50 max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden whitespace-nowrap rounded px-2 py-1 text-[10px] opacity-0 transition-opacity',
+                                isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
+                                'group-focus-within/delete:opacity-100 group-hover/delete:opacity-100',
+                              )}
+                              data-tooltip="true">
+                              {t.delete}
+                            </span>
+                          </span>
                         </div>
                       </div>
                     );
@@ -2178,22 +2314,38 @@ const SidePanel = () => {
                               <button
                                 onClick={saveEditMessage}
                                 className={cn(
-                                  'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
+                                  'group/edit relative rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
                                   isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
                                 )}
                                 title={t.save}
                                 aria-label={t.save}>
                                 {t.save}
+                                <span
+                                  className={cn(
+                                    'pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-[10px] opacity-0 transition-opacity',
+                                    isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
+                                    'group-hover/edit:opacity-100 group-focus-visible/edit:opacity-100',
+                                  )}>
+                                  {t.save}
+                                </span>
                               </button>
                               <button
                                 onClick={cancelEditMessage}
                                 className={cn(
-                                  'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
+                                  'group relative rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
                                   isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
                                 )}
                                 title={t.cancel}
                                 aria-label={t.cancel}>
                                 {t.cancel}
+                                <span
+                                  className={cn(
+                                    'pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-[10px] opacity-0 transition-opacity',
+                                    isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
+                                    'group-hover:opacity-100 group-focus-visible:opacity-100',
+                                  )}>
+                                  {t.cancel}
+                                </span>
                               </button>
                             </>
                           ) : (
@@ -2204,39 +2356,65 @@ const SidePanel = () => {
                                 if (firstText) startEditMessage(firstText.id);
                               }}
                               className={cn(
-                                'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
+                                'group relative rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
                                 isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
                               )}
                               title={t.edit}
                               aria-label={t.edit}>
                               ✎
+                              <span
+                                className={cn(
+                                  'pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-[10px] opacity-0 transition-opacity',
+                                  isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
+                                  'group-hover:opacity-100 group-focus-visible:opacity-100',
+                                )}>
+                                {t.edit}
+                              </span>
                             </button>
                           ))}
-                        <button
-                          onClick={() => deleteMessageGroup(block.batchId)}
-                          className={cn(
-                            'rounded-md p-1 text-gray-400 transition-colors',
-                            isLight ? 'hover:bg-slate-200 hover:text-red-600' : 'hover:bg-slate-700 hover:text-red-600',
-                          )}
-                          title={t.delete}
-                          aria-label={t.delete}>
-                          <svg
-                            aria-hidden="true"
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round">
-                            <path d="M3 6h18" />
-                            <path d="M8 6V4h8v2" />
-                            <path d="M19 6l-1 14H6L5 6" />
-                            <path d="M10 11v6" />
-                            <path d="M14 11v6" />
-                          </svg>
-                        </button>
+                        <span
+                          className="group/delete relative inline-block"
+                          onMouseEnter={onTooltipEnter}
+                          onFocus={onTooltipEnter}
+                          onMouseLeave={onTooltipLeave}
+                          onBlur={onTooltipLeave}>
+                          <button
+                            onClick={() => deleteMessageGroup(block.batchId)}
+                            className={cn(
+                              'rounded-md p-1 text-gray-400 transition-colors',
+                              isLight
+                                ? 'hover:bg-slate-200 hover:text-red-600'
+                                : 'hover:bg-slate-700 hover:text-red-600',
+                            )}
+                            title={t.delete}
+                            aria-label={t.delete}>
+                            <svg
+                              aria-hidden="true"
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round">
+                              <path d="M3 6h18" />
+                              <path d="M8 6V4h8v2" />
+                              <path d="M19 6l-1 14H6L5 6" />
+                              <path d="M10 11v6" />
+                              <path d="M14 11v6" />
+                            </svg>
+                          </button>
+                          <span
+                            className={cn(
+                              'pointer-events-none absolute -top-8 left-1/2 z-50 max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden whitespace-nowrap rounded px-2 py-1 text-[10px] opacity-0 transition-opacity',
+                              isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
+                              'group-focus-within/delete:opacity-100 group-hover/delete:opacity-100',
+                            )}
+                            data-tooltip="true">
+                            {t.delete}
+                          </span>
+                        </span>
                       </div>
                     </div>
                   );
@@ -3159,7 +3337,14 @@ const SidePanel = () => {
                 className="hidden"
                 onChange={onImagesSelected}
               />
-              <input ref={fileInputRef} type="file" multiple className="hidden" onChange={onFilesSelected} />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/pdf"
+                multiple
+                className="hidden"
+                onChange={onFilesSelected}
+              />
             </div>
           </div>
         )}
@@ -3194,9 +3379,18 @@ const SidePanel = () => {
                     )}
                     <button
                       onClick={() => removeAttachment(a.id)}
-                      className="absolute right-0 top-0 m-1 hidden rounded bg-black/60 px-1 py-0.5 text-xs text-white group-hover:block"
-                      aria-label={t.removeAttachment}>
+                      className="group/remove absolute right-0 top-0 m-1 hidden rounded bg-black/60 px-1 py-0.5 text-xs text-white group-hover:block"
+                      aria-label={t.removeAttachment}
+                      title={t.removeAttachment}>
                       ✕
+                      <span
+                        className={cn(
+                          'pointer-events-none absolute -top-6 right-0 whitespace-nowrap rounded px-2 py-1 text-[10px] opacity-0 transition-opacity',
+                          isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
+                          'group-hover/remove:opacity-100 group-focus-visible/remove:opacity-100',
+                        )}>
+                        {t.removeAttachment}
+                      </span>
                     </button>
                   </div>
                 ))}
