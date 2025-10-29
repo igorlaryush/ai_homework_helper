@@ -1343,9 +1343,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
     }
     const model = llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini';
     const instruction =
-      uiLocale === 'ru'
-        ? `Перефразируй текст, сохраняя смысл. Язык: ${writeLanguage}. Верни только перефразированный текст.`
-        : `Paraphrase the text while preserving meaning. Language: ${writeLanguage}. Return only the paraphrased text.`;
+      'Paraphrase the text while preserving meaning. Maintain the original language of the input text. Return only the paraphrased text.';
     setWriteParaphraseResult('');
     setIsParaphraseStreaming(true);
     void streamResponsesApi(
@@ -1369,7 +1367,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
         },
       },
     );
-  }, [isParaphraseStreaming, apiKeyInput, llmModel, uiLocale, t.missingKey, writeParaphraseInput, writeLanguage]);
+  }, [isParaphraseStreaming, apiKeyInput, llmModel, uiLocale, t.missingKey, writeParaphraseInput]);
 
   const acceptDroppedFiles = useCallback((files: File[]) => {
     const pdfs = files.filter(
