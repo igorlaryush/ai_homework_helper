@@ -16,8 +16,74 @@ export default function App() {
     null,
   );
 
+  type UILocale = 'en' | 'ru' | 'de' | 'es' | 'fr' | 'pt' | 'uk' | 'tr' | 'zh';
+  const [uiLocale, setUiLocale] = useState<UILocale>('en');
+  const T = {
+    en: {
+      openSidePanel: 'Open side panel',
+      selectionAria: 'Selection area for screenshot',
+      selectionHelp: 'ESC — cancel · Enter/Double click — accept',
+    },
+    ru: {
+      openSidePanel: 'Открыть боковую панель',
+      selectionAria: 'Выделение области для скриншота',
+      selectionHelp: 'ESC — отмена · Enter/Двойной клик — принять',
+    },
+    de: {
+      openSidePanel: 'Seitenleiste öffnen',
+      selectionAria: 'Auswahlbereich für Screenshot',
+      selectionHelp: 'ESC — Abbrechen · Enter/Doppelklick — Bestätigen',
+    },
+    fr: {
+      openSidePanel: 'Ouvrir le panneau latéral',
+      selectionAria: 'Zone de sélection pour la capture',
+      selectionHelp: 'ESC — annuler · Entrée/Double‑clic — valider',
+    },
+    es: {
+      openSidePanel: 'Abrir panel lateral',
+      selectionAria: 'Área de selección para captura',
+      selectionHelp: 'ESC — cancelar · Enter/Doble clic — aceptar',
+    },
+    pt: {
+      openSidePanel: 'Abrir painel lateral',
+      selectionAria: 'Área de seleção para captura de tela',
+      selectionHelp: 'ESC — cancelar · Enter/Clique duplo — confirmar',
+    },
+    uk: {
+      openSidePanel: 'Відкрити бокову панель',
+      selectionAria: 'Область виділення для скриншота',
+      selectionHelp: 'ESC — скасувати · Enter/Подвійний клік — прийняти',
+    },
+    tr: {
+      openSidePanel: 'Kenar paneli aç',
+      selectionAria: 'Ekran görüntüsü için seçim alanı',
+      selectionHelp: 'ESC — iptal · Enter/Çift tık — onayla',
+    },
+    zh: {
+      openSidePanel: '打开侧边面板',
+      selectionAria: '截图选择区域',
+      selectionHelp: 'ESC — 取消 · Enter/双击 — 确认',
+    },
+  } as const;
+  const t = T[uiLocale];
+
   useEffect(() => {
     console.log(`${LOG_PREFIX} mounted`);
+    // Load initial locale
+    chrome.storage?.local.get(['uiLocale']).then(store => {
+      const v = store?.uiLocale as UILocale | undefined;
+      const allowed: ReadonlyArray<UILocale> = ['en', 'ru', 'de', 'es', 'fr', 'pt', 'uk', 'tr', 'zh'] as const;
+      setUiLocale(allowed.includes(v as UILocale) ? (v as UILocale) : 'en');
+    });
+    // Listen for locale changes
+    const onStorageChanged = (changes: { [key: string]: chrome.storage.StorageChange }, areaName: string): void => {
+      if (areaName === 'local' && changes['uiLocale']) {
+        const v = changes['uiLocale'].newValue as UILocale | undefined;
+        const allowed: ReadonlyArray<UILocale> = ['en', 'ru', 'de', 'es', 'fr', 'pt', 'uk', 'tr', 'zh'] as const;
+        setUiLocale(allowed.includes(v as UILocale) ? (v as UILocale) : 'en');
+      }
+    };
+    chrome.storage?.onChanged.addListener(onStorageChanged);
     const onMessage = (message: unknown) => {
       const msg = message as { type?: string; isOpen?: boolean };
       if (msg?.type === 'SIDE_PANEL_OPENED') {
@@ -41,6 +107,7 @@ export default function App() {
     return () => {
       console.log(`${LOG_PREFIX} unmounted`);
       chrome.runtime.onMessage.removeListener(onMessage);
+      chrome.storage?.onChanged.removeListener(onStorageChanged);
     };
   }, []);
 
@@ -199,8 +266,8 @@ export default function App() {
             'text-white',
             'flex items-center justify-center',
           ].join(' ')}
-          aria-label="Open side panel"
-          title="Open side panel">
+          aria-label={t.openSidePanel}
+          title={t.openSidePanel}>
           <span className="text-xl">☰</span>
         </button>
       )}
@@ -208,7 +275,7 @@ export default function App() {
       {selecting && (
         <div
           role="button"
-          aria-label="Выделение области для скриншота"
+          aria-label={t.selectionAria}
           tabIndex={0}
           onKeyDown={onOverlayKeyDown}
           onMouseDown={onOverlayMouseDown}
@@ -243,7 +310,7 @@ export default function App() {
               color: '#fff',
               background: 'rgba(17,24,39,0.85)',
             }}>
-            ESC — отмена · Enter/Двойной клик — принять
+            {t.selectionHelp}
           </div>
         </div>
       )}
