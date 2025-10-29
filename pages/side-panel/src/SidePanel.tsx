@@ -1125,6 +1125,17 @@ const SidePanel = () => {
     ['tr', '🇹🇷'],
     ['zh', '🇨🇳'],
   ];
+  const languageEnglishNameByCode: Record<UILocale, string> = {
+    en: 'English',
+    ru: 'Russian',
+    uk: 'Ukrainian',
+    de: 'German',
+    fr: 'French',
+    es: 'Spanish',
+    pt: 'Portuguese',
+    tr: 'Turkish',
+    zh: 'Chinese',
+  };
   const headerTitle = mode === 'ask' ? t.title : mode === 'read' ? t.nav_read : t.nav_write;
 
   useEffect(() => {
@@ -3565,36 +3576,29 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                                   : 'border-slate-700 bg-slate-800 text-gray-100',
                               )}
                               role="listbox">
-                              <button
-                                onClick={() => {
-                                  setWriteLanguage('English');
-                                  setWriteLangOpen(false);
-                                }}
-                                role="option"
-                                aria-selected={writeLanguage === 'English'}
-                                className={cn(
-                                  'flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-slate-100 focus:bg-slate-100 dark:hover:bg-slate-700 dark:focus:bg-slate-700',
-                                  writeLanguage === 'English' ? 'font-semibold' : undefined,
-                                )}>
-                                <span>🇺🇸</span>
-                                <span className="flex-1">{t.lang_en}</span>
-                                {writeLanguage === 'English' && <span aria-hidden>✓</span>}
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setWriteLanguage('Russian');
-                                  setWriteLangOpen(false);
-                                }}
-                                role="option"
-                                aria-selected={writeLanguage === 'Russian'}
-                                className={cn(
-                                  'flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-slate-100 focus:bg-slate-100 dark:hover:bg-slate-700 dark:focus:bg-slate-700',
-                                  writeLanguage === 'Russian' ? 'font-semibold' : undefined,
-                                )}>
-                                <span>🇷🇺</span>
-                                <span className="flex-1">{t.lang_ru}</span>
-                                {writeLanguage === 'Russian' && <span aria-hidden>✓</span>}
-                              </button>
+                              {languageOptions.map(([code, flag]) => {
+                                const labelKey = langLabelKeyByCode[code];
+                                const englishName = languageEnglishNameByCode[code];
+                                const isSelected = writeLanguage === englishName;
+                                return (
+                                  <button
+                                    key={code}
+                                    onClick={() => {
+                                      setWriteLanguage(englishName);
+                                      setWriteLangOpen(false);
+                                    }}
+                                    role="option"
+                                    aria-selected={isSelected}
+                                    className={cn(
+                                      'flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-slate-100 focus:bg-slate-100 dark:hover:bg-slate-700 dark:focus:bg-slate-700',
+                                      isSelected ? 'font-semibold' : undefined,
+                                    )}>
+                                    <span>{flag}</span>
+                                    <span className="flex-1">{t[labelKey]}</span>
+                                    {isSelected && <span aria-hidden>✓</span>}
+                                  </button>
+                                );
+                              })}
                             </div>
                           )}
                         </div>
