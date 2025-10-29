@@ -89,6 +89,7 @@ const UI_I18N = {
     write_regenerate: 'Regenerate',
     write_copy: 'Copy',
     write_result: 'Result',
+    loading: 'Loading...',
     chip_auto: 'Auto',
     chip_essay: 'Essay',
     chip_article: 'Article',
@@ -163,6 +164,7 @@ const UI_I18N = {
     write_regenerate: 'Перегенерировать',
     write_copy: 'Копировать',
     write_result: 'Результат',
+    loading: 'Загрузка...',
     chip_auto: 'Auto',
     chip_essay: 'Essay',
     chip_article: 'Article',
@@ -264,7 +266,7 @@ const streamResponsesApi = async (
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
-        'OpenAI-Beta': 'responses-2024-10-22',
+        'OpenAI-Beta': 'responses=v1',
         Accept: 'text/event-stream',
       },
       body: JSON.stringify({ ...body, stream: true }),
@@ -713,7 +715,7 @@ const SidePanel = () => {
       return;
     }
 
-    const model = llmModel === 'deep' ? 'gpt-5o' : 'gpt-5o-mini';
+    const model = llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini';
     const inputPayload = buildHistoryInputItemsFrom(allMessagesForContext, 5);
 
     // Streaming placeholder message (show immediately)
@@ -920,9 +922,9 @@ const SidePanel = () => {
             );
             return;
           }
-          // Fallback 2: switch to gpt-5o-mini if deep model 403s
-          if (status === 403 && model === 'gpt-5o') {
-            const fallbackModel = 'gpt-5o-mini';
+          // Fallback 2: switch to gpt-4o-mini if deep model 403s
+          if (status === 403 && model === 'gpt-4o') {
+            const fallbackModel = 'gpt-4o-mini';
             void streamResponsesApi(
               {
                 apiKey: key,
@@ -1162,7 +1164,7 @@ const SidePanel = () => {
       return;
     }
     const base = writeComposeInput.trim() || (uiLocale === 'ru' ? 'Без названия' : 'Untitled draft');
-    const model = llmModel === 'deep' ? 'gpt-5o' : 'gpt-5o-mini';
+    const model = llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini';
     const titleCase = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
     const fmt = titleCase(writeFormat);
     const tone = titleCase(writeTone);
@@ -1255,7 +1257,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
       setWriteReviseResult(t.missingKey);
       return;
     }
-    const model = llmModel === 'deep' ? 'gpt-5o' : 'gpt-5o-mini';
+    const model = llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini';
     const instruction =
       uiLocale === 'ru'
         ? `Улучшай стиль и ясность текста, сохраняя смысл. Язык: ${writeLanguage}. Тон: ${writeTone}. Верни только улучшенный текст без пояснений.`
@@ -1297,7 +1299,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
       setWriteGrammarResult(t.missingKey);
       return;
     }
-    const model = llmModel === 'deep' ? 'gpt-5o' : 'gpt-5o-mini';
+    const model = llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini';
     const instruction =
       uiLocale === 'ru'
         ? 'Исправь грамматику и орфографию. Верни только исправленный текст без пояснений.'
@@ -1339,7 +1341,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
       setWriteParaphraseResult(t.missingKey);
       return;
     }
-    const model = llmModel === 'deep' ? 'gpt-5o' : 'gpt-5o-mini';
+    const model = llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini';
     const instruction =
       uiLocale === 'ru'
         ? `Перефразируй текст, сохраняя смысл. Язык: ${writeLanguage}. Верни только перефразированный текст.`
@@ -1547,7 +1549,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
         return;
       }
       const model =
-        (lastRequestRef.current?.model as string | undefined) ?? (llmModel === 'deep' ? 'gpt-5o' : 'gpt-5o-mini');
+        (lastRequestRef.current?.model as string | undefined) ?? (llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini');
       const historyInput = buildHistoryInputItemsBeforeMessage(id, 5);
       let inputPayload: unknown = null;
       if (historyInput.length > 0) inputPayload = historyInput;
@@ -2981,9 +2983,17 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                       <div className="mb-2 text-sm font-semibold">{t.write_result}</div>
                       <div
                         className={cn(
-                          'min-h-[140px] whitespace-pre-wrap rounded-xl p-3',
+                          'relative min-h-[140px] whitespace-pre-wrap rounded-xl p-3',
                           isLight ? 'bg-white ring-1 ring-black/10' : 'bg-slate-800 ring-1 ring-white/10',
                         )}>
+                        {isComposeStreaming && !writeComposeResult && (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="flex items-center gap-2 text-slate-500">
+                              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-slate-400 border-t-transparent" />
+                              <span className="text-sm">{t.loading}</span>
+                            </div>
+                          </div>
+                        )}
                         {writeComposeResult}
                       </div>
                       <div className="mt-3 flex items-center gap-3">
@@ -3052,9 +3062,17 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                       <div className="mb-2 text-sm font-semibold">{t.write_result}</div>
                       <div
                         className={cn(
-                          'min-h-[140px] whitespace-pre-wrap rounded-xl p-3',
+                          'relative min-h-[140px] whitespace-pre-wrap rounded-xl p-3',
                           isLight ? 'bg-white ring-1 ring-black/10' : 'bg-slate-800 ring-1 ring-white/10',
                         )}>
+                        {isReviseStreaming && !writeReviseResult && (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="flex items-center gap-2 text-slate-500">
+                              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-slate-400 border-t-transparent" />
+                              <span className="text-sm">{t.loading}</span>
+                            </div>
+                          </div>
+                        )}
                         {writeReviseResult}
                       </div>
                       <div className="mt-3 flex items-center gap-3">
@@ -3121,9 +3139,17 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                       <div className="mb-2 text-sm font-semibold">{t.write_result}</div>
                       <div
                         className={cn(
-                          'min-h-[140px] whitespace-pre-wrap rounded-xl p-3',
+                          'relative min-h-[140px] whitespace-pre-wrap rounded-xl p-3',
                           isLight ? 'bg-white ring-1 ring-black/10' : 'bg-slate-800 ring-1 ring-white/10',
                         )}>
+                        {isGrammarStreaming && !writeGrammarResult && (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="flex items-center gap-2 text-slate-500">
+                              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-slate-400 border-t-transparent" />
+                              <span className="text-sm">{t.loading}</span>
+                            </div>
+                          </div>
+                        )}
                         {writeGrammarResult}
                       </div>
                       <div className="mt-3 flex items-center gap-3">
@@ -3190,9 +3216,17 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                       <div className="mb-2 text-sm font-semibold">{t.write_result}</div>
                       <div
                         className={cn(
-                          'min-h-[140px] whitespace-pre-wrap rounded-xl p-3',
+                          'relative min-h-[140px] whitespace-pre-wrap rounded-xl p-3',
                           isLight ? 'bg-white ring-1 ring-black/10' : 'bg-slate-800 ring-1 ring-white/10',
                         )}>
+                        {isParaphraseStreaming && !writeParaphraseResult && (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="flex items-center gap-2 text-slate-500">
+                              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-slate-400 border-t-transparent" />
+                              <span className="text-sm">{t.loading}</span>
+                            </div>
+                          </div>
+                        )}
                         {writeParaphraseResult}
                       </div>
                       <div className="mt-3 flex items-center gap-3">
