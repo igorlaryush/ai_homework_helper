@@ -2994,7 +2994,9 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                             </div>
                           </div>
                         )}
-                        {writeComposeResult}
+                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                          {normalizeMathDelimiters(writeComposeResult)}
+                        </ReactMarkdown>
                       </div>
                       <div className="mt-3 flex items-center gap-3">
                         <button
@@ -3073,7 +3075,9 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                             </div>
                           </div>
                         )}
-                        {writeReviseResult}
+                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                          {normalizeMathDelimiters(writeReviseResult)}
+                        </ReactMarkdown>
                       </div>
                       <div className="mt-3 flex items-center gap-3">
                         <button
@@ -3150,7 +3154,9 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                             </div>
                           </div>
                         )}
-                        {writeGrammarResult}
+                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                          {normalizeMathDelimiters(writeGrammarResult)}
+                        </ReactMarkdown>
                       </div>
                       <div className="mt-3 flex items-center gap-3">
                         <button
@@ -3227,7 +3233,9 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                             </div>
                           </div>
                         )}
-                        {writeParaphraseResult}
+                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                          {normalizeMathDelimiters(writeParaphraseResult)}
+                        </ReactMarkdown>
                       </div>
                       <div className="mt-3 flex items-center gap-3">
                         <button
