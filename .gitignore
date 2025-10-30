@@ -23,3 +23,7 @@ tsconfig.tsbuildinfo
 
 # compiled
 **/tailwind-output.css
+
+# extension files
+dist.crx
+dist.pem
