@@ -881,16 +881,16 @@ type StreamCallbacks = {
 };
 
 const streamResponsesApi = async (
-  { apiKey, body }: { apiKey: string; body: Record<string, unknown> },
+  { apiKey: _apiKey, body }: { apiKey: string; body: Record<string, unknown> },
   { onDelta, onDone, onError }: StreamCallbacks,
 ): Promise<void> => {
+  // Mark unused when using backend proxy
+  void _apiKey;
   try {
-    const res = await fetch('https://api.openai.com/v1/responses', {
+    const res = await fetch('https://chatgpt-proxy-500570371278.us-west2.run.app/v1/responses', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-        'OpenAI-Beta': 'responses=v1',
         Accept: 'text/event-stream',
       },
       body: JSON.stringify({ ...body, stream: true }),
@@ -902,10 +902,85 @@ const streamResponsesApi = async (
       } catch {
         // ignore
       }
+      // Fallback: on 5xx, retry without streaming (JSON response)
+      if (res.status === 500 || res.status === 502 || res.status === 503 || res.status === 504) {
+        try {
+          const nonStream = await fetch('https://chatgpt-proxy-500570371278.us-west2.run.app/v1/responses', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+            },
+            body: JSON.stringify({ ...body, stream: false }),
+          });
+          if (nonStream.ok) {
+            const json = (await nonStream.json()) as ResponsesResult;
+            // Best-effort: emit full text to UI before completing
+            try {
+              const text =
+                (json && typeof json.output_text === 'string' && json.output_text) ||
+                (Array.isArray(json?.output)
+                  ? json.output
+                      .flatMap(item => (Array.isArray(item?.content) ? item.content : []))
+                      .map((c: unknown) => {
+                        const cc = c as { text?: string };
+                        return typeof cc?.text === 'string' ? cc.text : '';
+                      })
+                      .filter(Boolean)
+                      .join('')
+                  : '');
+              if (text) onDelta(text);
+            } catch {
+              // ignore
+            }
+            onDone(json);
+            return;
+          }
+        } catch {
+          // ignore and fallthrough to error
+        }
+      }
       onError({ status: res.status, body: bodyText });
       return;
     }
-    if (!res.body) throw new Error('No response body');
+    if (!res.body) {
+      // Fallback when stream body missing: try non-stream JSON once
+      try {
+        const nonStream = await fetch('https://chatgpt-proxy-500570371278.us-west2.run.app/v1/responses', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify({ ...body, stream: false }),
+        });
+        if (nonStream.ok) {
+          const json = (await nonStream.json()) as ResponsesResult;
+          try {
+            const text =
+              (json && typeof json.output_text === 'string' && json.output_text) ||
+              (Array.isArray(json?.output)
+                ? json.output
+                    .flatMap(item => (Array.isArray(item?.content) ? item.content : []))
+                    .map((c: unknown) => {
+                      const cc = c as { text?: string };
+                      return typeof cc?.text === 'string' ? cc.text : '';
+                    })
+                    .filter(Boolean)
+                    .join('')
+                : '');
+            if (text) onDelta(text);
+          } catch {
+            // ignore
+          }
+          onDone(json);
+          return;
+        }
+      } catch {
+        // ignore
+      }
+      throw new Error('No response body');
+    }
     const reader = res.body.getReader();
     const decoder = new TextDecoder('utf-8');
     let buffer = '';
@@ -982,17 +1057,16 @@ const cropImageDataUrl = async (
 };
 
 // Upload a file to OpenAI Files API and return file_id
-const uploadFileToOpenAI = async ({ apiKey, file }: { apiKey: string; file: File }): Promise<string> => {
+const uploadFileToOpenAI = async ({ apiKey: _apiKey, file }: { apiKey: string; file: File }): Promise<string> => {
+  // Mark unused when using backend proxy
+  void _apiKey;
   const form = new FormData();
   form.append('file', file, file.name);
   // Use user_data for files that will be used as model inputs per OpenAI guidance
   form.append('purpose', 'user_data');
 
-  const res = await fetch('https://api.openai.com/v1/files', {
+  const res = await fetch('https://chatgpt-proxy-500570371278.us-west2.run.app/v1/files', {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-    },
     body: form,
   });
 
@@ -1358,22 +1432,7 @@ const SidePanel = () => {
     if (imageInputRef.current) imageInputRef.current.value = '';
     if (fileInputRef.current) fileInputRef.current.value = '';
 
-    if (!key) {
-      const assistantMsg: ChatMessage = {
-        id: `assistant-${Date.now() + 1}`,
-        role: 'assistant',
-        type: 'text',
-        content: t.missingKey,
-      };
-      setMessages(prev => [...prev, assistantMsg]);
-      upsertActiveThread(thread => ({
-        ...thread,
-        updatedAt: Date.now(),
-        messages: [...thread.messages, assistantMsg],
-      }));
-      queueMicrotask(() => inputRef.current?.focus());
-      return;
-    }
+    // No local API key required when using backend proxy
 
     const model = llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini';
     const inputPayload = buildHistoryInputItemsFrom(allMessagesForContext, 5);
@@ -1637,7 +1696,6 @@ const SidePanel = () => {
     upsertActiveThread,
     apiKeyInput,
     llmModel,
-    t.missingKey,
     webAccessEnabled,
     activeId,
     messages,
@@ -1819,10 +1877,6 @@ const SidePanel = () => {
   const generateCompose = useCallback(async () => {
     if (isComposeStreaming) return;
     const key = apiKeyInput.trim();
-    if (!key) {
-      setWriteComposeResult(t.missingKey);
-      return;
-    }
     const base = writeComposeInput.trim() || (uiLocale === 'ru' ? 'Без названия' : 'Untitled draft');
     const model = llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini';
     const titleCase = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
@@ -1889,7 +1943,6 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
     apiKeyInput,
     llmModel,
     uiLocale,
-    t.missingKey,
     writeComposeInput,
     writeFormat,
     writeTone,
@@ -1913,10 +1966,6 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
       return;
     }
     const key = apiKeyInput.trim();
-    if (!key) {
-      setWriteReviseResult(t.missingKey);
-      return;
-    }
     const model = llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini';
     const instruction =
       uiLocale === 'ru'
@@ -1945,7 +1994,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
         },
       },
     );
-  }, [isReviseStreaming, apiKeyInput, llmModel, uiLocale, t.missingKey, writeReviseInput, writeLanguage, writeTone]);
+  }, [isReviseStreaming, apiKeyInput, llmModel, uiLocale, writeReviseInput, writeLanguage, writeTone]);
 
   const runGrammar = useCallback(async () => {
     if (isGrammarStreaming) return;
@@ -1955,10 +2004,6 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
       return;
     }
     const key = apiKeyInput.trim();
-    if (!key) {
-      setWriteGrammarResult(t.missingKey);
-      return;
-    }
     const model = llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini';
     const instruction =
       uiLocale === 'ru'
@@ -1987,7 +2032,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
         },
       },
     );
-  }, [isGrammarStreaming, apiKeyInput, llmModel, uiLocale, t.missingKey, writeGrammarInput]);
+  }, [isGrammarStreaming, apiKeyInput, llmModel, uiLocale, writeGrammarInput]);
 
   const runParaphrase = useCallback(async () => {
     if (isParaphraseStreaming) return;
@@ -1997,10 +2042,6 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
       return;
     }
     const key = apiKeyInput.trim();
-    if (!key) {
-      setWriteParaphraseResult(t.missingKey);
-      return;
-    }
     const model = llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini';
     const instruction =
       'Paraphrase the text while preserving meaning. Maintain the original language of the input text. Return only the paraphrased text.';
@@ -2027,7 +2068,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
         },
       },
     );
-  }, [isParaphraseStreaming, apiKeyInput, llmModel, uiLocale, t.missingKey, writeParaphraseInput]);
+  }, [isParaphraseStreaming, apiKeyInput, llmModel, uiLocale, writeParaphraseInput]);
 
   const acceptDroppedFiles = useCallback((files: File[]) => {
     const pdfs = files.filter(
@@ -2190,22 +2231,6 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
   const regenerateAssistantMessage = useCallback(
     (id: string) => {
       const key = apiKeyInput.trim();
-      if (!key) {
-        const newContent = t.missingKey;
-        setMessages(prev =>
-          prev.map(m =>
-            m.id === id && m.role === 'assistant' && m.type === 'text' ? { ...m, content: newContent } : m,
-          ),
-        );
-        upsertActiveThread(thread => ({
-          ...thread,
-          updatedAt: Date.now(),
-          messages: thread.messages.map(m =>
-            m.id === id && m.role === 'assistant' && m.type === 'text' ? { ...m, content: newContent } : m,
-          ),
-        }));
-        return;
-      }
       const model =
         (lastRequestRef.current?.model as string | undefined) ?? (llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini');
       const historyInput = buildHistoryInputItemsBeforeMessage(id, 5);
@@ -2304,7 +2329,6 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
       llmModel,
       uiLocale,
       upsertActiveThread,
-      t.missingKey,
       webAccessEnabled,
       buildHistoryInputItemsBeforeMessage,
       messages,
