@@ -54,6 +54,7 @@ const UI_I18N = {
     history: 'History',
     delete: 'Delete',
     edit: 'Edit',
+    branchFromHere: 'Branch from here',
     cancel: 'Cancel',
     deleteChat: 'Delete chat',
     confirmDeleteChat: 'Delete this chat?',
@@ -140,6 +141,7 @@ const UI_I18N = {
     history: 'История',
     delete: 'Удалить',
     edit: 'Редактировать',
+    branchFromHere: 'Ответвиться отсюда',
     cancel: 'Отмена',
     deleteChat: 'Удалить чат',
     confirmDeleteChat: 'Удалить этот чат?',
@@ -226,6 +228,7 @@ const UI_I18N = {
     history: 'Історія',
     delete: 'Видалити',
     edit: 'Редагувати',
+    branchFromHere: 'Відгалуження звідси',
     cancel: 'Скасувати',
     deleteChat: 'Видалити чат',
     confirmDeleteChat: 'Видалити цей чат?',
@@ -312,6 +315,7 @@ const UI_I18N = {
     history: 'Verlauf',
     delete: 'Löschen',
     edit: 'Bearbeiten',
+    branchFromHere: 'Ab hier verzweigen',
     cancel: 'Abbrechen',
     deleteChat: 'Chat löschen',
     confirmDeleteChat: 'Diesen Chat löschen?',
@@ -398,6 +402,7 @@ const UI_I18N = {
     history: 'Historique',
     delete: 'Supprimer',
     edit: 'Modifier',
+    branchFromHere: 'Créer une branche ici',
     cancel: 'Annuler',
     deleteChat: 'Supprimer la conversation',
     confirmDeleteChat: 'Supprimer cette conversation ?',
@@ -484,6 +489,7 @@ const UI_I18N = {
     history: 'Historial',
     delete: 'Eliminar',
     edit: 'Editar',
+    branchFromHere: 'Rama desde aquí',
     cancel: 'Cancelar',
     deleteChat: 'Eliminar chat',
     confirmDeleteChat: '¿Eliminar este chat?',
@@ -570,6 +576,7 @@ const UI_I18N = {
     history: 'Histórico',
     delete: 'Excluir',
     edit: 'Editar',
+    branchFromHere: 'Ramificar a partir daqui',
     cancel: 'Cancelar',
     deleteChat: 'Excluir chat',
     confirmDeleteChat: 'Excluir este chat?',
@@ -656,6 +663,7 @@ const UI_I18N = {
     history: 'Geçmiş',
     delete: 'Sil',
     edit: 'Düzenle',
+    branchFromHere: 'Buradan dallan',
     cancel: 'İptal',
     deleteChat: 'Sohbeti sil',
     confirmDeleteChat: 'Bu sohbet silinsin mi?',
@@ -742,6 +750,7 @@ const UI_I18N = {
     history: '历史',
     delete: '删除',
     edit: '编辑',
+    branchFromHere: '从这里分支',
     cancel: '取消',
     deleteChat: '删除聊天',
     confirmDeleteChat: '删除此聊天？',
@@ -2227,6 +2236,226 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
     [upsertActiveThread, editingMessageId, messages],
   );
 
+  // Branch: trim messages after a user message/group and generate a new assistant answer
+  const startBranchFromMessages = useCallback(
+    (kept: ChatMessage[]) => {
+      setMessages(kept);
+      upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now(), messages: kept }));
+
+      const key = apiKeyInput.trim();
+      const model = llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini';
+      const inputPayload = buildHistoryInputItemsFrom(kept, 5);
+
+      lastRequestRef.current = { model, inputPayload };
+
+      const streamId = `assistant-${Date.now() + 1}`;
+      setMessages(prev => [...prev, { id: streamId, role: 'assistant', type: 'text', content: '' }]);
+      upsertActiveThread(thread => ({
+        ...thread,
+        updatedAt: Date.now(),
+        messages: [...thread.messages, { id: streamId, role: 'assistant', type: 'text', content: '' }],
+      }));
+      setIsStreaming(true);
+      setStreamingMessageId(streamId);
+
+      const combinedTools: Array<{ type: 'web_search' }> = [];
+      if (webAccessEnabled) combinedTools.push({ type: 'web_search' });
+
+      void streamResponsesApi(
+        {
+          apiKey: key,
+          body: {
+            model,
+            input: inputPayload,
+            text: { format: { type: 'text' } },
+            ...(combinedTools.length > 0 ? { tools: combinedTools, tool_choice: 'auto' as const } : {}),
+            ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
+          },
+        },
+        {
+          onDelta: chunk => {
+            const applyChunk = (m: ChatMessage) =>
+              m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + chunk } : m;
+            setMessages(prev => prev.map(applyChunk));
+            upsertActiveThread(thread => ({ ...thread, messages: thread.messages.map(applyChunk) }));
+          },
+          onDone: final => {
+            if (final && typeof final.id === 'string') lastResponseIdRef.current = final.id;
+            setThreads(prev =>
+              prev.map(t => (t.id === activeId ? { ...t, lastResponseId: lastResponseIdRef.current ?? undefined } : t)),
+            );
+            const citations = final ? extractCitationsFromOutput(final.output) : [];
+            if (citations.length > 0) {
+              const suffix =
+                '\n\n' +
+                (uiLocale === 'ru' ? 'Источники:' : 'Sources:') +
+                '\n' +
+                citations
+                  .slice(0, 8)
+                  .map(c => `- ${c.title ? `[${c.title}](${c.url})` : c.url}`)
+                  .join('\n');
+              const applySuffix = (m: ChatMessage) =>
+                m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + suffix } : m;
+              setMessages(prev => prev.map(applySuffix));
+              upsertActiveThread(thread => ({
+                ...thread,
+                updatedAt: Date.now(),
+                messages: thread.messages.map(applySuffix),
+              }));
+            } else {
+              upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
+            }
+            setIsStreaming(false);
+            setStreamingMessageId(null);
+            queueMicrotask(() => inputRef.current?.focus());
+          },
+          onError: err => {
+            console.error('[CEB][SidePanel] OpenAI stream error (branch)', err);
+            const status =
+              err && typeof err === 'object' && 'status' in (err as Record<string, unknown>)
+                ? Number((err as Record<string, unknown>).status)
+                : undefined;
+            if (status === 403 && webAccessEnabled) {
+              void streamResponsesApi(
+                {
+                  apiKey: key,
+                  body: {
+                    model,
+                    input: inputPayload,
+                    text: { format: { type: 'text' } },
+                    ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
+                  },
+                },
+                {
+                  onDelta: chunk => {
+                    const applyChunk = (m: ChatMessage) =>
+                      m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + chunk } : m;
+                    setMessages(prev => prev.map(applyChunk));
+                    upsertActiveThread(thread => ({ ...thread, messages: thread.messages.map(applyChunk) }));
+                  },
+                  onDone: final => {
+                    if (final && typeof final.id === 'string') lastResponseIdRef.current = final.id;
+                    const citations = final ? extractCitationsFromOutput(final.output) : [];
+                    if (citations.length > 0) {
+                      const suffix =
+                        '\n\n' +
+                        (uiLocale === 'ru' ? 'Источники:' : 'Sources:') +
+                        '\n' +
+                        citations
+                          .slice(0, 8)
+                          .map(c => `- ${c.title ? `[${c.title}](${c.url})` : c.url}`)
+                          .join('\n');
+                      setMessages(prev =>
+                        prev.map(m =>
+                          m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + suffix } : m,
+                        ),
+                      );
+                      upsertActiveThread(thread => ({
+                        ...thread,
+                        updatedAt: Date.now(),
+                        messages: thread.messages.map(m =>
+                          m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + suffix } : m,
+                        ),
+                      }));
+                    } else {
+                      upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
+                    }
+                    setIsStreaming(false);
+                    setStreamingMessageId(null);
+                    queueMicrotask(() => inputRef.current?.focus());
+                  },
+                  onError: () => {
+                    const content = uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.';
+                    const applyErr = (m: ChatMessage) =>
+                      m.id === streamId && m.type === 'text' ? { ...m, content } : m;
+                    setMessages(prev => prev.map(applyErr));
+                    upsertActiveThread(thread => ({
+                      ...thread,
+                      updatedAt: Date.now(),
+                      messages: thread.messages.map(applyErr),
+                    }));
+                    setIsStreaming(false);
+                    queueMicrotask(() => inputRef.current?.focus());
+                  },
+                },
+              );
+              return;
+            }
+            if (status === 403 && model === 'gpt-4o') {
+              const fallbackModel = 'gpt-4o-mini';
+              void streamResponsesApi(
+                {
+                  apiKey: key,
+                  body: {
+                    model: fallbackModel,
+                    input: inputPayload,
+                    text: { format: { type: 'text' } },
+                    ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
+                  },
+                },
+                {
+                  onDelta: chunk => {
+                    const applyChunk = (m: ChatMessage) =>
+                      m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + chunk } : m;
+                    setMessages(prev => prev.map(applyChunk));
+                  },
+                  onDone: () => {
+                    setIsStreaming(false);
+                    setStreamingMessageId(null);
+                  },
+                  onError: () => {
+                    setIsStreaming(false);
+                    setStreamingMessageId(null);
+                  },
+                },
+              );
+              return;
+            }
+            const content = uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.';
+            const applyErr = (m: ChatMessage) => (m.id === streamId && m.type === 'text' ? { ...m, content } : m);
+            setMessages(prev => prev.map(applyErr));
+            upsertActiveThread(thread => ({
+              ...thread,
+              updatedAt: Date.now(),
+              messages: thread.messages.map(applyErr),
+            }));
+            setIsStreaming(false);
+            setStreamingMessageId(null);
+            queueMicrotask(() => inputRef.current?.focus());
+          },
+        },
+      );
+    },
+    [upsertActiveThread, apiKeyInput, llmModel, webAccessEnabled, buildHistoryInputItemsFrom, uiLocale, activeId],
+  );
+
+  const branchFromMessage = useCallback(
+    (id: string) => {
+      const idx = messages.findIndex(m => m.id === id);
+      if (idx < 0) return;
+      const kept = messages.slice(0, idx + 1);
+      startBranchFromMessages(kept);
+    },
+    [messages, startBranchFromMessages],
+  );
+
+  const branchFromGroup = useCallback(
+    (batchId: string) => {
+      const lastIdx = (() => {
+        for (let i = messages.length - 1; i >= 0; i--) {
+          const m = messages[i];
+          if (m.role === 'user' && m.batchId === batchId) return i;
+          if (m.batchId === batchId && m.role !== 'user') break;
+        }
+        return -1;
+      })();
+      if (lastIdx < 0) return;
+      const kept = messages.slice(0, lastIdx + 1);
+      startBranchFromMessages(kept);
+    },
+    [messages, startBranchFromMessages],
+  );
+
   // Regenerate assistant text message via API
   const regenerateAssistantMessage = useCallback(
     (id: string) => {
@@ -3064,6 +3293,34 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                                 </span>
                               </span>
                             ))}
+                          {m.role === 'user' && (
+                            <span
+                              className="group/branch relative inline-block"
+                              onMouseEnter={onTooltipEnter}
+                              onFocus={onTooltipEnter}
+                              onMouseLeave={onTooltipLeave}
+                              onBlur={onTooltipLeave}>
+                              <button
+                                onClick={() => branchFromMessage(m.id)}
+                                className={cn(
+                                  'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
+                                  isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
+                                )}
+                                title={t.branchFromHere}
+                                aria-label={t.branchFromHere}>
+                                ⎇
+                              </button>
+                              <span
+                                className={cn(
+                                  'pointer-events-none absolute -top-8 left-1/2 z-50 max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden whitespace-nowrap rounded px-2 py-1 text-[10px] opacity-0 transition-opacity',
+                                  isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
+                                  'group-focus-within/branch:opacity-100 group-hover/branch:opacity-100',
+                                )}
+                                data-tooltip="true">
+                                {t.branchFromHere}
+                              </span>
+                            </span>
+                          )}
                           <span
                             className="group/delete relative inline-block"
                             onMouseEnter={onTooltipEnter}
@@ -3279,6 +3536,26 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                               </span>
                             </button>
                           ))}
+                        {role === 'user' && (
+                          <button
+                            onClick={() => branchFromGroup(block.batchId)}
+                            className={cn(
+                              'group relative rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
+                              isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
+                            )}
+                            title={t.branchFromHere}
+                            aria-label={t.branchFromHere}>
+                            ⎇
+                            <span
+                              className={cn(
+                                'pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-[10px] opacity-0 transition-opacity',
+                                isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
+                                'group-hover:opacity-100 group-focus-visible:opacity-100',
+                              )}>
+                              {t.branchFromHere}
+                            </span>
+                          </button>
+                        )}
                         <span
                           className="group/delete relative inline-block"
                           onMouseEnter={onTooltipEnter}
