@@ -1127,9 +1127,7 @@ const SidePanel = () => {
   const [webAccessEnabled, setWebAccessEnabled] = useState<boolean>(false);
   const [modelPopoverOpen, setModelPopoverOpen] = useState<boolean>(false);
   const [llmModel, setLlmModel] = useState<'quick' | 'deep'>('quick');
-  const [apiKeyOpen, setApiKeyOpen] = useState<boolean>(false);
-  const [apiKeyInput, setApiKeyInput] = useState<string>('');
-  const [apiKeyMasked, setApiKeyMasked] = useState<string>('');
+  // Local API key input is removed
   const lastRequestRef = useRef<{ model: string; inputPayload: unknown; fileIds?: string[] } | null>(null);
 
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
@@ -1258,7 +1256,6 @@ const SidePanel = () => {
         STORAGE_KEYS.webAccess,
         STORAGE_KEYS.llmModel,
         STORAGE_KEYS.readRecent,
-        'openai_api_key',
       ])
       .then(store => {
         const v = store?.uiLocale as UILocale | undefined;
@@ -1276,11 +1273,7 @@ const SidePanel = () => {
         const loadedRead = (store?.[STORAGE_KEYS.readRecent] as ReadFileItem[] | undefined) ?? [];
         setReadFiles(loadedRead);
 
-        const key = (store?.openai_api_key as string | undefined) ?? '';
-        if (key) {
-          setApiKeyInput(key);
-          setApiKeyMasked(`${key.slice(0, 3)}••••${key.slice(-4)}`);
-        }
+        // No local API key is used
 
         const loadedThreads = (store?.[STORAGE_KEYS.threads] as ChatThread[] | undefined) ?? [];
         const loadedActive = (store?.[STORAGE_KEYS.activeId] as string | undefined) ?? '';
@@ -1323,10 +1316,7 @@ const SidePanel = () => {
   useEffect(() => {
     void chrome.storage?.local.set({ [STORAGE_KEYS.readRecent]: readFiles });
   }, [readFiles]);
-  useEffect(() => {
-    const toSave = apiKeyInput.trim();
-    if (toSave === '' || toSave.startsWith('sk-')) void chrome.storage?.local.set({ openai_api_key: toSave });
-  }, [apiKeyInput]);
+  // No local API key is persisted
 
   // Keep previous_response_id ref in sync with the active thread (survives reload via storage -> threads)
   useEffect(() => {
@@ -1432,7 +1422,7 @@ const SidePanel = () => {
     }
 
     // Prepare API request before clearing inputs
-    const key = apiKeyInput.trim();
+    const key = '';
     // Build contextual history including the just-appended user turn
     const allMessagesForContext = withBatch.length > 0 ? [...messages, ...withBatch] : messages;
 
@@ -1703,7 +1693,6 @@ const SidePanel = () => {
     attachments,
     uiLocale,
     upsertActiveThread,
-    apiKeyInput,
     llmModel,
     webAccessEnabled,
     activeId,
@@ -1885,7 +1874,7 @@ const SidePanel = () => {
   // Write actions
   const generateCompose = useCallback(async () => {
     if (isComposeStreaming) return;
-    const key = apiKeyInput.trim();
+    const key = '';
     const base = writeComposeInput.trim() || (uiLocale === 'ru' ? 'Без названия' : 'Untitled draft');
     const model = llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini';
     const titleCase = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
@@ -1947,17 +1936,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
         },
       },
     );
-  }, [
-    isComposeStreaming,
-    apiKeyInput,
-    llmModel,
-    uiLocale,
-    writeComposeInput,
-    writeFormat,
-    writeTone,
-    writeLength,
-    writeLanguage,
-  ]);
+  }, [isComposeStreaming, llmModel, uiLocale, writeComposeInput, writeFormat, writeTone, writeLength, writeLanguage]);
 
   const copyText = useCallback(async (text: string) => {
     try {
@@ -1974,7 +1953,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
       setWriteReviseResult('');
       return;
     }
-    const key = apiKeyInput.trim();
+    const key = '';
     const model = llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini';
     const instruction =
       uiLocale === 'ru'
@@ -2003,7 +1982,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
         },
       },
     );
-  }, [isReviseStreaming, apiKeyInput, llmModel, uiLocale, writeReviseInput, writeLanguage, writeTone]);
+  }, [isReviseStreaming, llmModel, uiLocale, writeReviseInput, writeLanguage, writeTone]);
 
   const runGrammar = useCallback(async () => {
     if (isGrammarStreaming) return;
@@ -2012,7 +1991,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
       setWriteGrammarResult('');
       return;
     }
-    const key = apiKeyInput.trim();
+    const key = '';
     const model = llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini';
     const instruction =
       uiLocale === 'ru'
@@ -2041,7 +2020,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
         },
       },
     );
-  }, [isGrammarStreaming, apiKeyInput, llmModel, uiLocale, writeGrammarInput]);
+  }, [isGrammarStreaming, llmModel, uiLocale, writeGrammarInput]);
 
   const runParaphrase = useCallback(async () => {
     if (isParaphraseStreaming) return;
@@ -2050,7 +2029,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
       setWriteParaphraseResult('');
       return;
     }
-    const key = apiKeyInput.trim();
+    const key = '';
     const model = llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini';
     const instruction =
       'Paraphrase the text while preserving meaning. Maintain the original language of the input text. Return only the paraphrased text.';
@@ -2077,7 +2056,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
         },
       },
     );
-  }, [isParaphraseStreaming, apiKeyInput, llmModel, uiLocale, writeParaphraseInput]);
+  }, [isParaphraseStreaming, llmModel, uiLocale, writeParaphraseInput]);
 
   const acceptDroppedFiles = useCallback((files: File[]) => {
     const pdfs = files.filter(
@@ -2242,7 +2221,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
       setMessages(kept);
       upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now(), messages: kept }));
 
-      const key = apiKeyInput.trim();
+      const key = '';
       const model = llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini';
       const inputPayload = buildHistoryInputItemsFrom(kept, 5);
 
@@ -2426,7 +2405,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
         },
       );
     },
-    [upsertActiveThread, apiKeyInput, llmModel, webAccessEnabled, buildHistoryInputItemsFrom, uiLocale, activeId],
+    [upsertActiveThread, llmModel, webAccessEnabled, buildHistoryInputItemsFrom, uiLocale, activeId],
   );
 
   const branchFromMessage = useCallback(
@@ -2459,7 +2438,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
   // Regenerate assistant text message via API
   const regenerateAssistantMessage = useCallback(
     (id: string) => {
-      const key = apiKeyInput.trim();
+      const key = '';
       const model =
         (lastRequestRef.current?.model as string | undefined) ?? (llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini');
       const historyInput = buildHistoryInputItemsBeforeMessage(id, 5);
@@ -2553,15 +2532,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
         },
       );
     },
-    [
-      apiKeyInput,
-      llmModel,
-      uiLocale,
-      upsertActiveThread,
-      webAccessEnabled,
-      buildHistoryInputItemsBeforeMessage,
-      messages,
-    ],
+    [llmModel, uiLocale, upsertActiveThread, webAccessEnabled, buildHistoryInputItemsBeforeMessage, messages],
   );
 
   // Start editing a user text message
@@ -2933,99 +2904,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
               )}
             </div>
 
-            {/* API Key button */}
-            <div
-              className="relative"
-              onBlur={e => {
-                if (!e.currentTarget.contains(e.relatedTarget as Node)) setApiKeyOpen(false);
-              }}>
-              <button
-                onClick={() => setApiKeyOpen(v => !v)}
-                title={t.apiKey}
-                aria-label={t.apiKey}
-                aria-haspopup="dialog"
-                aria-expanded={apiKeyOpen}
-                className={cn(
-                  'group relative inline-flex h-8 w-8 items-center justify-center rounded-md border text-base transition-colors',
-                  isLight
-                    ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
-                    : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
-                )}>
-                <svg
-                  aria-hidden="true"
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round">
-                  <path d="M21 10v6a2 2 0 0 1-2 2H7l-4 4V6a2 2 0 0 1 2-2h8" />
-                  <path d="M15 3h6v6" />
-                  <path d="M10 14l11-11" />
-                </svg>
-                <span
-                  className={cn(
-                    'pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity',
-                    isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
-                    'group-hover:opacity-100 group-focus-visible:opacity-100',
-                  )}>
-                  {t.apiKey}
-                </span>
-              </button>
-              {apiKeyOpen && (
-                <div
-                  className={cn(
-                    'absolute right-0 z-20 mt-2 w-72 overflow-hidden rounded-md border p-3 text-sm shadow-lg',
-                    isLight ? 'border-slate-200 bg-white text-gray-900' : 'border-slate-700 bg-slate-800 text-gray-100',
-                  )}>
-                  <div className="mb-2 font-medium">{t.setApiKey}</div>
-                  <input
-                    type="password"
-                    value={apiKeyInput}
-                    onChange={e => setApiKeyInput(e.target.value)}
-                    placeholder={t.enterApiKey}
-                    className={cn(
-                      'mb-2 w-full rounded border px-2 py-1',
-                      isLight ? 'border-slate-300 bg-white' : 'border-slate-600 bg-slate-700',
-                    )}
-                  />
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        setApiKeyOpen(false);
-                        const key = apiKeyInput.trim();
-                        setApiKeyMasked(key ? `${key.slice(0, 3)}••••${key.slice(-4)}` : '');
-                      }}
-                      className={cn(
-                        'rounded px-3 py-1 text-sm',
-                        isLight
-                          ? 'bg-violet-600 text-white hover:bg-violet-700'
-                          : 'bg-violet-600 text-white hover:bg-violet-500',
-                      )}
-                      aria-label={t.save}
-                      title={t.save}>
-                      {t.save}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setApiKeyInput('');
-                        setApiKeyMasked('');
-                      }}
-                      className={cn(
-                        'rounded px-3 py-1 text-sm',
-                        isLight ? 'bg-slate-200 hover:bg-slate-300' : 'bg-slate-700 hover:bg-slate-600',
-                      )}
-                      aria-label={t.clear}
-                      title={t.clear}>
-                      {t.clear}
-                    </button>
-                    <div className="ml-auto text-xs opacity-70">{apiKeyMasked || t.missingKey}</div>
-                  </div>
-                </div>
-              )}
-            </div>
+            {/* API Key input removed */}
           </div>
         </div>
 
@@ -4647,10 +4526,10 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={onKeyDown}
                 onPaste={onComposerPaste}
-                rows={1}
+                rows={2}
                 placeholder={t.placeholder}
                 className={cn(
-                  'max-h-40 min-h-[40px] w-full resize-none rounded-md border px-3 py-2 pr-12 text-sm outline-none',
+                  'max-h-40 min-h-[64px] w-full resize-none rounded-md border px-3 py-2 pr-12 text-sm outline-none',
                   isLight
                     ? 'border-slate-300 bg-white text-gray-900 focus:border-violet-500 focus:ring-1 focus:ring-violet-500'
                     : 'border-slate-600 bg-slate-700 text-gray-100 focus:border-violet-400 focus:ring-1 focus:ring-violet-400',
