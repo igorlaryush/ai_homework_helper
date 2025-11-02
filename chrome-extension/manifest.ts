@@ -43,6 +43,7 @@ const manifest = {
   },
   action: {
     default_icon: 'icon-34.png',
+    default_title: '__MSG_extensionName__',
   },
   icons: {
     '128': 'icon-128.png',

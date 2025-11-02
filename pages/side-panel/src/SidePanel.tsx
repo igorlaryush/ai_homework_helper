@@ -2869,7 +2869,6 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
         <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-3 py-2 dark:border-slate-700">
           <div className="flex items-center gap-2">
             <div className="text-base font-semibold">{headerTitle}</div>
-            {mode === 'ask' && !apiKeyInput.trim() && <div className="text-xs opacity-70">{t.uiOnly}</div>}
           </div>
           <div className="relative flex items-center gap-2">
             {/* Theme toggle */}
@@ -4691,7 +4690,6 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                 </span>
               </button>
             </div>
-            <div className="mt-1 text-xs opacity-70">{t.uiNote}</div>
           </div>
         )}
       </div>

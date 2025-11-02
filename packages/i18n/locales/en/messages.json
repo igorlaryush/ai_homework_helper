@@ -5,7 +5,7 @@
   },
   "extensionName": {
     "description": "Extension name",
-    "message": "Chrome extension boilerplate"
+    "message": "AI Homework Helper"
   },
   "toggleTheme": {
     "message": "Toggle theme"
