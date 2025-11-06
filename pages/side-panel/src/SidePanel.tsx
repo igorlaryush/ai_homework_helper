@@ -11,9 +11,30 @@ import remarkMath from 'remark-math';
 
 const normalizeMathDelimiters = (input: string): string => {
   if (!input) return input;
-  let output = input.replace(/\\\[([\s\S]*?)\\\]/g, (_, inner) => `$$\n${inner}\n$$`);
+
+  // Normalize line endings first for consistent processing
+  let output = input.replace(/\r\n?/g, '\n');
+
+  // Convert TeX \[...\] and \(...\) into remark-math block/inline forms
+  output = output.replace(/\\\[([\s\S]*?)\\\]/g, (_, inner) => `$$\n${inner}\n$$`);
   output = output.replace(/\\\(([\s\S]*?)\\\)/g, (_, inner) => `$${inner}$`);
-  // Left-align block math delimited by $$ to prevent markdown code fences interpretation
+
+  // Ensure block math markers are clean: trim spaces on lines that are only '$$'
+  output = output.replace(/^[ \t]*\$\$[ \t]*$/gm, '$$');
+
+  // Aggressively collapse all spaces and blank lines AROUND block math so it
+  // stays attached to surrounding list items (no empty separating paragraphs)
+  // 1) Remove extra blank lines before opening $$ (leave at most one newline)
+  output = output.replace(/(^|\n)[ \t]*\n+[ \t]*(?=\$\$)/g, '$1');
+  // 2) Remove extra blank lines after closing $$ (leave exactly one newline)
+  output = output.replace(/(\$\$)[ \t]*\n[ \t]*\n+/g, '$1\n');
+
+  // 3) Canonical pass: eat all surrounding whitespace around complete $$...$$ blocks
+  //    while preserving a single leading newline (when not at start) and a single
+  //    trailing newline (when not at end). This prevents list breaks.
+  output = output.replace(/(^|\n)[ \t]*\n*[ \t]*(\$\$[\s\S]*?\$\$)[ \t]*\n*[ \t]*(?=\n|$)/g, '$1$2');
+
+  // Left-align content inside $$ blocks to avoid being parsed as code fences
   const lines = output.split('\n');
   const normalized: string[] = [];
   let insideBlock = false;
@@ -31,6 +52,10 @@ const normalizeMathDelimiters = (input: string): string => {
     }
   }
   output = normalized.join('\n');
+
+  // Final safeguard: collapse any residual extra blank lines around $$ again
+  output = output.replace(/(^|\n)[ \t]*\n+(?=\$\$)/g, '$1').replace(/(\$\$)[ \t]*\n[ \t]*\n+/g, '$1\n');
+
   return output;
 };
 
