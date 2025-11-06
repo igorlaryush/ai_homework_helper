@@ -13,56 +13,24 @@ const normalizeMathDelimiters = (input: string): string => {
   if (!input) return input;
   let output = input.replace(/\\\[([\s\S]*?)\\\]/g, (_, inner) => `$$\n${inner}\n$$`);
   output = output.replace(/\\\(([\s\S]*?)\\\)/g, (_, inner) => `$${inner}$`);
-
-  const hasMathToken =
-    /(\\(?:frac|text|sum|sqrt|times|cdot|int|pi|theta|lambda|mu|sigma|delta|omega|epsilon|phi|psi|chi|kappa|rho|eta|tau|upsilon|zeta|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Phi|Psi|Omega|nabla|partial|infty|leq|geq|neq|approx|pm|mp|cap|cup|forall|exists|Rightarrow|rightarrow|leftarrow|leftrightarrow|overline|underline|hat|vec|bar|tilde|dot|ddot|mathbb|mathrm|mathbf|mathcal|displaystyle|operatorname)|\^|_)/;
-  const hasDelimiter = /(^|[^\\])\$|\\\(|\\\[|\\begin\{/;
-
+  // Left-align block math delimited by $$ to prevent markdown code fences interpretation
   const lines = output.split('\n');
-  const processed: string[] = [];
-  let insideBlock = false; // between standalone $$ delimiters
+  const normalized: string[] = [];
+  let insideBlock = false;
   for (const line of lines) {
     const trimmed = line.trim();
     if (trimmed === '$$') {
+      normalized.push('$$');
       insideBlock = !insideBlock;
-      processed.push(line);
-      continue;
-    }
-    if (!trimmed) {
-      processed.push(line);
       continue;
     }
     if (insideBlock) {
-      processed.push(line);
-      continue;
+      normalized.push(line.replace(/^[\t ]+/, ''));
+    } else {
+      normalized.push(line);
     }
-    if (!hasMathToken.test(trimmed) || hasDelimiter.test(trimmed)) {
-      processed.push(line);
-      continue;
-    }
-
-    const leading = line.match(/^\s*/)?.[0] ?? '';
-    const trailing = line.match(/\s*$/)?.[0] ?? '';
-    const preferBlock =
-      trimmed.includes('=') ||
-      trimmed.includes('\\frac') ||
-      trimmed.includes('\\begin') ||
-      trimmed.includes('\\end') ||
-      trimmed.includes('\\int') ||
-      trimmed.includes('\\sum') ||
-      trimmed.includes('\\lim') ||
-      trimmed.includes('\\prod') ||
-      trimmed.includes('\\text') ||
-      trimmed.includes('\\rightarrow') ||
-      trimmed.includes('\\left') ||
-      trimmed.length > 40;
-
-    const wrapped = preferBlock ? `$$\n${trimmed}\n$$` : `$${trimmed}$`;
-    processed.push(`${leading}${wrapped}${trailing}`);
   }
-
-  output = processed.join('\n');
-
+  output = normalized.join('\n');
   return output;
 };
 
@@ -446,7 +414,7 @@ const UI_I18N = {
     title: 'LLM Chat',
     uiOnly: 'Interface uniquement',
     toggleTheme: 'Changer le thème',
-    screenshot: 'Capture d’écran',
+    screenshot: "Capture d'écran",
     uploadImage: 'Téléverser une image',
     uploadFile: 'Téléverser un PDF',
     newChat: 'Nouvelle conversation',
@@ -478,7 +446,7 @@ const UI_I18N = {
     model: 'Modèle',
     model_quick: 'Rapide — rapide et léger',
     model_deep: 'Précis — précis et lourd',
-    nav_ask: 'Demander à l’IA',
+    nav_ask: "Demander à l'IA",
     nav_read: 'Lire',
     nav_write: 'Écrire',
     comingSoon: 'Bientôt disponible',
@@ -920,6 +888,9 @@ type ReadFileItem = {
 
 const MAX_TEXTAREA_PX = 160; // Tailwind max-h-40
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
+
+const SYSTEM_PROMPT_MARKDOWN =
+  'You are a helpful AI studing assistant. All of your responses must be formatted using Markdown.';
 
 // Minimal types for OpenAI Responses API parsing
 type ResponseAnnotation = { url?: string; title?: string };
@@ -1502,7 +1473,7 @@ const SidePanel = () => {
     const model = llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini';
     const inputPayload = buildHistoryInputItemsFrom(allMessagesForContext, 5);
 
-    // Streaming placeholder message (show immediately)
+    // Streaming placeholder messages (raw first, then processed, then rendered on completion)
     const streamId = `assistant-${Date.now() + 1}`;
     setMessages(prev => [...prev, { id: streamId, role: 'assistant', type: 'text', content: '', noRender: true }]);
     upsertActiveThread(thread => ({
@@ -1512,6 +1483,14 @@ const SidePanel = () => {
     }));
     setIsStreaming(true);
     setStreamingMessageId(streamId);
+
+    const processedId = `assistant-processed-${Date.now() + 2}`;
+    setMessages(prev => [...prev, { id: processedId, role: 'assistant', type: 'text', content: '', noRender: true }]);
+    upsertActiveThread(thread => ({
+      ...thread,
+      updatedAt: Date.now(),
+      messages: [...thread.messages, { id: processedId, role: 'assistant', type: 'text', content: '', noRender: true }],
+    }));
 
     // Upload file attachments via Files API to enable file_search
     const fileAttachmentIds = attachmentsSnapshot.filter(a => a.kind === 'file').map(a => a.id);
@@ -1559,6 +1538,11 @@ const SidePanel = () => {
           ]
         : inputPayload;
 
+    const finalInput = [
+      { role: 'system', content: [{ type: 'input_text', text: SYSTEM_PROMPT_MARKDOWN }] },
+      ...inputWithFiles,
+    ];
+
     // Clean used files from the map
     for (const id of fileAttachmentIds) delete attachmentFileMapRef.current[id];
 
@@ -1572,7 +1556,7 @@ const SidePanel = () => {
         apiKey: key,
         body: {
           model,
-          input: inputWithFiles,
+          input: finalInput,
           text: { format: { type: 'text' } },
           // Enable web_search if requested; files are passed via input_file
           ...(combinedTools.length > 0 ? { tools: combinedTools, tool_choice: 'auto' as const } : {}),
@@ -1581,15 +1565,30 @@ const SidePanel = () => {
       },
       {
         onDelta: chunk => {
-          setMessages(prev =>
-            prev.map(m => (m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + chunk } : m)),
-          );
-          upsertActiveThread(thread => ({
-            ...thread,
-            messages: thread.messages.map(m =>
-              m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + chunk } : m,
-            ),
-          }));
+          setMessages(prev => {
+            const rawMsg = prev.find(m => m.id === streamId && m.type === 'text');
+            const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+            const nextRaw = String(currentRaw ?? '') + chunk;
+            return prev.map(m => {
+              if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
+              if (m.id === processedId && m.type === 'text') return { ...m, content: normalizeMathDelimiters(nextRaw) };
+              return m;
+            });
+          });
+          upsertActiveThread(thread => {
+            const rawMsg = thread.messages.find(m => m.id === streamId && m.type === 'text');
+            const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+            const nextRaw = String(currentRaw ?? '') + chunk;
+            return {
+              ...thread,
+              messages: thread.messages.map(m => {
+                if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
+                if (m.id === processedId && m.type === 'text')
+                  return { ...m, content: normalizeMathDelimiters(nextRaw) };
+                return m;
+              }),
+            };
+          });
         },
         onDone: final => {
           if (final && typeof final.id === 'string') lastResponseIdRef.current = final.id;
@@ -1606,18 +1605,32 @@ const SidePanel = () => {
                 .slice(0, 8)
                 .map(c => `- ${c.title ? `[${c.title}](${c.url})` : c.url}`)
                 .join('\n');
-            setMessages(prev =>
-              prev.map(m =>
-                m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + suffix } : m,
-              ),
-            );
-            upsertActiveThread(thread => ({
-              ...thread,
-              updatedAt: Date.now(),
-              messages: thread.messages.map(m =>
-                m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + suffix } : m,
-              ),
-            }));
+            setMessages(prev => {
+              const rawMsg = prev.find(m => m.id === streamId && m.type === 'text');
+              const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+              const nextRaw = String(currentRaw ?? '') + suffix;
+              return prev.map(m => {
+                if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
+                if (m.id === processedId && m.type === 'text')
+                  return { ...m, content: normalizeMathDelimiters(nextRaw) };
+                return m;
+              });
+            });
+            upsertActiveThread(thread => {
+              const rawMsg = thread.messages.find(m => m.id === streamId && m.type === 'text');
+              const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+              const nextRaw = String(currentRaw ?? '') + suffix;
+              return {
+                ...thread,
+                updatedAt: Date.now(),
+                messages: thread.messages.map(m => {
+                  if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
+                  if (m.id === processedId && m.type === 'text')
+                    return { ...m, content: normalizeMathDelimiters(nextRaw) };
+                  return m;
+                }),
+              };
+            });
           } else {
             upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
           }
@@ -1661,7 +1674,7 @@ const SidePanel = () => {
                 apiKey: key,
                 body: {
                   model,
-                  input: inputWithFiles,
+                  input: finalInput,
                   text: { format: { type: 'text' } },
                   // No tools on retry
                   ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
@@ -1669,17 +1682,31 @@ const SidePanel = () => {
               },
               {
                 onDelta: chunk => {
-                  setMessages(prev =>
-                    prev.map(m =>
-                      m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + chunk } : m,
-                    ),
-                  );
-                  upsertActiveThread(thread => ({
-                    ...thread,
-                    messages: thread.messages.map(m =>
-                      m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + chunk } : m,
-                    ),
-                  }));
+                  setMessages(prev => {
+                    const rawMsg = prev.find(m => m.id === streamId && m.type === 'text');
+                    const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+                    const nextRaw = String(currentRaw ?? '') + chunk;
+                    return prev.map(m => {
+                      if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
+                      if (m.id === processedId && m.type === 'text')
+                        return { ...m, content: normalizeMathDelimiters(nextRaw) };
+                      return m;
+                    });
+                  });
+                  upsertActiveThread(thread => {
+                    const rawMsg = thread.messages.find(m => m.id === streamId && m.type === 'text');
+                    const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+                    const nextRaw = String(currentRaw ?? '') + chunk;
+                    return {
+                      ...thread,
+                      messages: thread.messages.map(m => {
+                        if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
+                        if (m.id === processedId && m.type === 'text')
+                          return { ...m, content: normalizeMathDelimiters(nextRaw) };
+                        return m;
+                      }),
+                    };
+                  });
                 },
                 onDone: final => {
                   if (final && typeof final.id === 'string') lastResponseIdRef.current = final.id;
@@ -1693,18 +1720,32 @@ const SidePanel = () => {
                         .slice(0, 8)
                         .map(c => `- ${c.title ? `[${c.title}](${c.url})` : c.url}`)
                         .join('\n');
-                    setMessages(prev =>
-                      prev.map(m =>
-                        m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + suffix } : m,
-                      ),
-                    );
-                    upsertActiveThread(thread => ({
-                      ...thread,
-                      updatedAt: Date.now(),
-                      messages: thread.messages.map(m =>
-                        m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + suffix } : m,
-                      ),
-                    }));
+                    setMessages(prev => {
+                      const rawMsg = prev.find(m => m.id === streamId && m.type === 'text');
+                      const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+                      const nextRaw = String(currentRaw ?? '') + suffix;
+                      return prev.map(m => {
+                        if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
+                        if (m.id === processedId && m.type === 'text')
+                          return { ...m, content: normalizeMathDelimiters(nextRaw) };
+                        return m;
+                      });
+                    });
+                    upsertActiveThread(thread => {
+                      const rawMsg = thread.messages.find(m => m.id === streamId && m.type === 'text');
+                      const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+                      const nextRaw = String(currentRaw ?? '') + suffix;
+                      return {
+                        ...thread,
+                        updatedAt: Date.now(),
+                        messages: thread.messages.map(m => {
+                          if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
+                          if (m.id === processedId && m.type === 'text')
+                            return { ...m, content: normalizeMathDelimiters(nextRaw) };
+                          return m;
+                        }),
+                      };
+                    });
                   } else {
                     upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
                   }
@@ -1760,7 +1801,7 @@ const SidePanel = () => {
                 apiKey: key,
                 body: {
                   model: fallbackModel,
-                  input: inputWithFiles,
+                  input: finalInput,
                   text: { format: { type: 'text' } },
                   // No tools on fallback
                   ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
@@ -1768,11 +1809,17 @@ const SidePanel = () => {
               },
               {
                 onDelta: chunk => {
-                  setMessages(prev =>
-                    prev.map(m =>
-                      m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + chunk } : m,
-                    ),
-                  );
+                  setMessages(prev => {
+                    const rawMsg = prev.find(m => m.id === streamId && m.type === 'text');
+                    const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+                    const nextRaw = String(currentRaw ?? '') + chunk;
+                    return prev.map(m => {
+                      if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
+                      if (m.id === processedId && m.type === 'text')
+                        return { ...m, content: normalizeMathDelimiters(nextRaw) };
+                      return m;
+                    });
+                  });
                 },
                 onDone: () => {
                   setIsStreaming(false);
@@ -1999,7 +2046,7 @@ Your goal is to generate a well-structured and coherent piece of text perfectly 
 
 Follow these parameters when generating text:
 - Format: ${fmt}
-- Tone: ${tone}
+- Tone: ${tone} 
 - Length: ${len}
 - Language: ${lang}
 - Topic: ${base}
@@ -2033,6 +2080,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
         body: {
           model,
           input: [
+            { role: 'system', content: [{ type: 'input_text', text: SYSTEM_PROMPT_MARKDOWN }] },
             { role: 'system', content: [{ type: 'input_text', text: systemPrompt }] },
             { role: 'user', content: [{ type: 'input_text', text: base }] },
           ],
@@ -2079,6 +2127,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
         body: {
           model,
           input: [
+            { role: 'system', content: [{ type: 'input_text', text: SYSTEM_PROMPT_MARKDOWN }] },
             { role: 'user', content: [{ type: 'input_text', text: instruction }] },
             { role: 'user', content: [{ type: 'input_text', text }] },
           ],
@@ -2117,6 +2166,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
         body: {
           model,
           input: [
+            { role: 'system', content: [{ type: 'input_text', text: SYSTEM_PROMPT_MARKDOWN }] },
             { role: 'user', content: [{ type: 'input_text', text: instruction }] },
             { role: 'user', content: [{ type: 'input_text', text }] },
           ],
@@ -2153,6 +2203,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
         body: {
           model,
           input: [
+            { role: 'system', content: [{ type: 'input_text', text: SYSTEM_PROMPT_MARKDOWN }] },
             { role: 'user', content: [{ type: 'input_text', text: instruction }] },
             { role: 'user', content: [{ type: 'input_text', text }] },
           ],
@@ -2336,6 +2387,10 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
       const key = '';
       const model = llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini';
       const inputPayload = buildHistoryInputItemsFrom(kept, 5);
+      const branchInput = [
+        { role: 'system', content: [{ type: 'input_text', text: SYSTEM_PROMPT_MARKDOWN }] },
+        ...inputPayload,
+      ];
 
       lastRequestRef.current = { model, inputPayload };
 
@@ -2349,6 +2404,17 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
       setIsStreaming(true);
       setStreamingMessageId(streamId);
 
+      const processedId = `assistant-processed-${Date.now() + 2}`;
+      setMessages(prev => [...prev, { id: processedId, role: 'assistant', type: 'text', content: '', noRender: true }]);
+      upsertActiveThread(thread => ({
+        ...thread,
+        updatedAt: Date.now(),
+        messages: [
+          ...thread.messages,
+          { id: processedId, role: 'assistant', type: 'text', content: '', noRender: true },
+        ],
+      }));
+
       const combinedTools: Array<{ type: 'web_search' }> = [];
       if (webAccessEnabled) combinedTools.push({ type: 'web_search' });
 
@@ -2357,7 +2423,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
           apiKey: key,
           body: {
             model,
-            input: inputPayload,
+            input: branchInput,
             text: { format: { type: 'text' } },
             ...(combinedTools.length > 0 ? { tools: combinedTools, tool_choice: 'auto' as const } : {}),
             ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
@@ -2365,10 +2431,31 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
         },
         {
           onDelta: chunk => {
-            const applyChunk = (m: ChatMessage) =>
-              m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + chunk } : m;
-            setMessages(prev => prev.map(applyChunk));
-            upsertActiveThread(thread => ({ ...thread, messages: thread.messages.map(applyChunk) }));
+            setMessages(prev => {
+              const rawMsg = prev.find(m => m.id === streamId && m.type === 'text');
+              const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+              const nextRaw = String(currentRaw ?? '') + chunk;
+              return prev.map(m => {
+                if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
+                if (m.id === processedId && m.type === 'text')
+                  return { ...m, content: normalizeMathDelimiters(nextRaw) };
+                return m;
+              });
+            });
+            upsertActiveThread(thread => {
+              const rawMsg = thread.messages.find(m => m.id === streamId && m.type === 'text');
+              const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+              const nextRaw = String(currentRaw ?? '') + chunk;
+              return {
+                ...thread,
+                messages: thread.messages.map(m => {
+                  if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
+                  if (m.id === processedId && m.type === 'text')
+                    return { ...m, content: normalizeMathDelimiters(nextRaw) };
+                  return m;
+                }),
+              };
+            });
           },
           onDone: final => {
             if (final && typeof final.id === 'string') lastResponseIdRef.current = final.id;
@@ -2385,14 +2472,32 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                   .slice(0, 8)
                   .map(c => `- ${c.title ? `[${c.title}](${c.url})` : c.url}`)
                   .join('\n');
-              const applySuffix = (m: ChatMessage) =>
-                m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + suffix } : m;
-              setMessages(prev => prev.map(applySuffix));
-              upsertActiveThread(thread => ({
-                ...thread,
-                updatedAt: Date.now(),
-                messages: thread.messages.map(applySuffix),
-              }));
+              setMessages(prev => {
+                const rawMsg = prev.find(m => m.id === streamId && m.type === 'text');
+                const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+                const nextRaw = String(currentRaw ?? '') + suffix;
+                return prev.map(m => {
+                  if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
+                  if (m.id === processedId && m.type === 'text')
+                    return { ...m, content: normalizeMathDelimiters(nextRaw) };
+                  return m;
+                });
+              });
+              upsertActiveThread(thread => {
+                const rawMsg = thread.messages.find(m => m.id === streamId && m.type === 'text');
+                const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+                const nextRaw = String(currentRaw ?? '') + suffix;
+                return {
+                  ...thread,
+                  updatedAt: Date.now(),
+                  messages: thread.messages.map(m => {
+                    if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
+                    if (m.id === processedId && m.type === 'text')
+                      return { ...m, content: normalizeMathDelimiters(nextRaw) };
+                    return m;
+                  }),
+                };
+              });
             } else {
               upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
             }
@@ -2435,17 +2540,38 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                   apiKey: key,
                   body: {
                     model,
-                    input: inputPayload,
+                    input: branchInput,
                     text: { format: { type: 'text' } },
                     ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
                   },
                 },
                 {
                   onDelta: chunk => {
-                    const applyChunk = (m: ChatMessage) =>
-                      m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + chunk } : m;
-                    setMessages(prev => prev.map(applyChunk));
-                    upsertActiveThread(thread => ({ ...thread, messages: thread.messages.map(applyChunk) }));
+                    setMessages(prev => {
+                      const rawMsg = prev.find(m => m.id === streamId && m.type === 'text');
+                      const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+                      const nextRaw = String(currentRaw ?? '') + chunk;
+                      return prev.map(m => {
+                        if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
+                        if (m.id === processedId && m.type === 'text')
+                          return { ...m, content: normalizeMathDelimiters(nextRaw) };
+                        return m;
+                      });
+                    });
+                    upsertActiveThread(thread => {
+                      const rawMsg = thread.messages.find(m => m.id === streamId && m.type === 'text');
+                      const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+                      const nextRaw = String(currentRaw ?? '') + chunk;
+                      return {
+                        ...thread,
+                        messages: thread.messages.map(m => {
+                          if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
+                          if (m.id === processedId && m.type === 'text')
+                            return { ...m, content: normalizeMathDelimiters(nextRaw) };
+                          return m;
+                        }),
+                      };
+                    });
                   },
                   onDone: final => {
                     if (final && typeof final.id === 'string') lastResponseIdRef.current = final.id;
@@ -2459,18 +2585,32 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                           .slice(0, 8)
                           .map(c => `- ${c.title ? `[${c.title}](${c.url})` : c.url}`)
                           .join('\n');
-                      setMessages(prev =>
-                        prev.map(m =>
-                          m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + suffix } : m,
-                        ),
-                      );
-                      upsertActiveThread(thread => ({
-                        ...thread,
-                        updatedAt: Date.now(),
-                        messages: thread.messages.map(m =>
-                          m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + suffix } : m,
-                        ),
-                      }));
+                      setMessages(prev => {
+                        const rawMsg = prev.find(m => m.id === streamId && m.type === 'text');
+                        const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+                        const nextRaw = String(currentRaw ?? '') + suffix;
+                        return prev.map(m => {
+                          if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
+                          if (m.id === processedId && m.type === 'text')
+                            return { ...m, content: normalizeMathDelimiters(nextRaw) };
+                          return m;
+                        });
+                      });
+                      upsertActiveThread(thread => {
+                        const rawMsg = thread.messages.find(m => m.id === streamId && m.type === 'text');
+                        const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+                        const nextRaw = String(currentRaw ?? '') + suffix;
+                        return {
+                          ...thread,
+                          updatedAt: Date.now(),
+                          messages: thread.messages.map(m => {
+                            if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
+                            if (m.id === processedId && m.type === 'text')
+                              return { ...m, content: normalizeMathDelimiters(nextRaw) };
+                            return m;
+                          }),
+                        };
+                      });
                     } else {
                       upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
                     }
@@ -2525,16 +2665,24 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                   apiKey: key,
                   body: {
                     model: fallbackModel,
-                    input: inputPayload,
+                    input: branchInput,
                     text: { format: { type: 'text' } },
                     ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
                   },
                 },
                 {
                   onDelta: chunk => {
-                    const applyChunk = (m: ChatMessage) =>
-                      m.id === streamId && m.type === 'text' ? { ...m, content: (m.content ?? '') + chunk } : m;
-                    setMessages(prev => prev.map(applyChunk));
+                    setMessages(prev => {
+                      const rawMsg = prev.find(m => m.id === streamId && m.type === 'text');
+                      const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+                      const nextRaw = String(currentRaw ?? '') + chunk;
+                      return prev.map(m => {
+                        if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
+                        if (m.id === processedId && m.type === 'text')
+                          return { ...m, content: normalizeMathDelimiters(nextRaw) };
+                        return m;
+                      });
+                    });
                   },
                   onDone: () => {
                     setIsStreaming(false);
@@ -2609,6 +2757,16 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
       const targetIdx = messages.findIndex(m => m.id === id);
       const isLatestTarget = targetIdx === messages.length - 1;
 
+      const regenInput: Array<Record<string, unknown>> = Array.isArray(inputPayload)
+        ? [
+            { role: 'system', content: [{ type: 'input_text', text: SYSTEM_PROMPT_MARKDOWN }] },
+            ...((inputPayload as Array<Record<string, unknown>>) || []),
+          ]
+        : [
+            { role: 'system', content: [{ type: 'input_text', text: SYSTEM_PROMPT_MARKDOWN }] },
+            { role: 'user', content: [{ type: 'input_text', text: String(inputPayload) }] },
+          ];
+
       // Reset the target assistant message content before streaming
       setMessages(prev => prev.map(m => (m.id === id && m.type === 'text' ? { ...m, content: '' } : m)));
       upsertActiveThread(thread => ({
@@ -2627,7 +2785,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
           apiKey: key,
           body: {
             model,
-            input: inputPayload,
+            input: regenInput,
             text: { format: { type: 'text' } },
             ...(regenTools.length > 0 ? { tools: regenTools } : {}),
             ...(regenTools.length > 0 ? { tool_choice: 'auto' as const } : {}),
