@@ -13,19 +13,83 @@ const normalizeMathDelimiters = (input: string): string => {
   if (!input) return input;
   let output = input.replace(/\\\[([\s\S]*?)\\\]/g, (_, inner) => `$$\n${inner}\n$$`);
   output = output.replace(/\\\(([\s\S]*?)\\\)/g, (_, inner) => `$${inner}$`);
-  const looksLikeMath = /(\\|\^|_|\\frac|\\sum|\\int|\\cdot|\\hat|\\vec|\\nabla|\\sqrt|\\begin|\\end|=)/;
-  output = output.replace(/(^|\n)\s*\[\s*([\s\S]*?)\s*\]\s*(?=\n|$)/g, (m, start, inner) => {
-    if (!looksLikeMath.test(inner)) return m;
-    return `${start}$$\n${inner}\n$$`;
-  });
-  output = output.replace(/\[(.+?)\](?!\(|:)/g, (m, inner, offset) => {
-    const before = output[offset - 3] + output[offset - 2] + output[offset - 1];
-    if (before && (before.endsWith('[ ') || before.endsWith('[x') || before.endsWith('[X'))) return m;
-    if (inner.includes('\n')) return m;
-    if (!looksLikeMath.test(inner)) return m;
-    return `$${inner}$`;
-  });
+
+  const hasMathToken =
+    /(\\(?:frac|text|sum|sqrt|times|cdot|int|pi|theta|lambda|mu|sigma|delta|omega|epsilon|phi|psi|chi|kappa|rho|eta|tau|upsilon|zeta|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Phi|Psi|Omega|nabla|partial|infty|leq|geq|neq|approx|pm|mp|cap|cup|forall|exists|Rightarrow|rightarrow|leftarrow|leftrightarrow|overline|underline|hat|vec|bar|tilde|dot|ddot|mathbb|mathrm|mathbf|mathcal|displaystyle|operatorname)|\^|_)/;
+  const hasDelimiter = /(^|[^\\])\$|\\\(|\\\[|\\begin\{/;
+
+  const lines = output.split('\n');
+  const processed: string[] = [];
+  let insideBlock = false; // between standalone $$ delimiters
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed === '$$') {
+      insideBlock = !insideBlock;
+      processed.push(line);
+      continue;
+    }
+    if (!trimmed) {
+      processed.push(line);
+      continue;
+    }
+    if (insideBlock) {
+      processed.push(line);
+      continue;
+    }
+    if (!hasMathToken.test(trimmed) || hasDelimiter.test(trimmed)) {
+      processed.push(line);
+      continue;
+    }
+
+    const leading = line.match(/^\s*/)?.[0] ?? '';
+    const trailing = line.match(/\s*$/)?.[0] ?? '';
+    const preferBlock =
+      trimmed.includes('=') ||
+      trimmed.includes('\\frac') ||
+      trimmed.includes('\\begin') ||
+      trimmed.includes('\\end') ||
+      trimmed.includes('\\int') ||
+      trimmed.includes('\\sum') ||
+      trimmed.includes('\\lim') ||
+      trimmed.includes('\\prod') ||
+      trimmed.includes('\\text') ||
+      trimmed.includes('\\rightarrow') ||
+      trimmed.includes('\\left') ||
+      trimmed.length > 40;
+
+    const wrapped = preferBlock ? `$$\n${trimmed}\n$$` : `$${trimmed}$`;
+    processed.push(`${leading}${wrapped}${trailing}`);
+  }
+
+  output = processed.join('\n');
+
   return output;
+};
+
+const StreamableMarkdown = ({
+  text,
+  streaming,
+  forcePlain,
+}: {
+  text?: string;
+  streaming: boolean;
+  forcePlain?: boolean;
+}) => {
+  const content = text ?? '';
+  if (!content) return null;
+
+  if (streaming || forcePlain) {
+    return <div className="whitespace-pre-wrap break-words">{content}</div>;
+  }
+
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkMath, remarkGfm]}
+      rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false, trust: true }]]}
+      key={content}>
+      {normalizeMathDelimiters(content)}
+    </ReactMarkdown>
+  );
 };
 
 // Simple UI translations for the side panel (local only)
@@ -816,7 +880,7 @@ const UI_I18N = {
 } as const;
 
 type ChatMessage =
-  | { id: string; role: 'user' | 'assistant'; type: 'text'; content: string; batchId?: string }
+  | { id: string; role: 'user' | 'assistant'; type: 'text'; content: string; batchId?: string; noRender?: boolean }
   | { id: string; role: 'user' | 'assistant'; type: 'image'; dataUrl: string; batchId?: string }
   | {
       id: string;
@@ -827,6 +891,8 @@ type ChatMessage =
       mime: string;
       batchId?: string;
     };
+
+const isTextMessage = (m: ChatMessage): m is Extract<ChatMessage, { type: 'text' }> => m.type === 'text';
 
 type ChatThread = {
   id: string;
@@ -1438,11 +1504,11 @@ const SidePanel = () => {
 
     // Streaming placeholder message (show immediately)
     const streamId = `assistant-${Date.now() + 1}`;
-    setMessages(prev => [...prev, { id: streamId, role: 'assistant', type: 'text', content: '' }]);
+    setMessages(prev => [...prev, { id: streamId, role: 'assistant', type: 'text', content: '', noRender: true }]);
     upsertActiveThread(thread => ({
       ...thread,
       updatedAt: Date.now(),
-      messages: [...thread.messages, { id: streamId, role: 'assistant', type: 'text', content: '' }],
+      messages: [...thread.messages, { id: streamId, role: 'assistant', type: 'text', content: '', noRender: true }],
     }));
     setIsStreaming(true);
     setStreamingMessageId(streamId);
@@ -1555,6 +1621,29 @@ const SidePanel = () => {
           } else {
             upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
           }
+          // Duplicate rendered message after stream completes
+          setMessages(prev => {
+            const source = prev.find(m => m.id === streamId);
+            if (!source || !isTextMessage(source)) return prev;
+            const duplicate: ChatMessage = {
+              id: `assistant-rendered-${Date.now()}`,
+              role: 'assistant',
+              type: 'text',
+              content: source.content,
+            };
+            return [...prev, duplicate];
+          });
+          upsertActiveThread(thread => {
+            const source = thread.messages.find(m => m.id === streamId);
+            if (!source || !isTextMessage(source)) return { ...thread, updatedAt: Date.now() };
+            const duplicate: ChatMessage = {
+              id: `assistant-rendered-${Date.now() + 1}`,
+              role: 'assistant',
+              type: 'text',
+              content: source.content,
+            };
+            return { ...thread, updatedAt: Date.now(), messages: [...thread.messages, duplicate] };
+          });
           setIsStreaming(false);
           setStreamingMessageId(null);
           queueMicrotask(() => inputRef.current?.focus());
@@ -1619,6 +1708,29 @@ const SidePanel = () => {
                   } else {
                     upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
                   }
+                  // Duplicate rendered message after stream completes (retry path without web_search)
+                  setMessages(prev => {
+                    const source = prev.find(m => m.id === streamId);
+                    if (!source || !isTextMessage(source)) return prev;
+                    const duplicate: ChatMessage = {
+                      id: `assistant-rendered-${Date.now()}`,
+                      role: 'assistant',
+                      type: 'text',
+                      content: source.content,
+                    };
+                    return [...prev, duplicate];
+                  });
+                  upsertActiveThread(thread => {
+                    const source = thread.messages.find(m => m.id === streamId);
+                    if (!source || !isTextMessage(source)) return { ...thread, updatedAt: Date.now() };
+                    const duplicate: ChatMessage = {
+                      id: `assistant-rendered-${Date.now() + 1}`,
+                      role: 'assistant',
+                      type: 'text',
+                      content: source.content,
+                    };
+                    return { ...thread, updatedAt: Date.now(), messages: [...thread.messages, duplicate] };
+                  });
                   setIsStreaming(false);
                   setStreamingMessageId(null);
                   queueMicrotask(() => inputRef.current?.focus());
@@ -2228,11 +2340,11 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
       lastRequestRef.current = { model, inputPayload };
 
       const streamId = `assistant-${Date.now() + 1}`;
-      setMessages(prev => [...prev, { id: streamId, role: 'assistant', type: 'text', content: '' }]);
+      setMessages(prev => [...prev, { id: streamId, role: 'assistant', type: 'text', content: '', noRender: true }]);
       upsertActiveThread(thread => ({
         ...thread,
         updatedAt: Date.now(),
-        messages: [...thread.messages, { id: streamId, role: 'assistant', type: 'text', content: '' }],
+        messages: [...thread.messages, { id: streamId, role: 'assistant', type: 'text', content: '', noRender: true }],
       }));
       setIsStreaming(true);
       setStreamingMessageId(streamId);
@@ -2284,6 +2396,29 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
             } else {
               upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
             }
+            // Duplicate rendered message for branch
+            setMessages(prev => {
+              const source = prev.find(m => m.id === streamId);
+              if (!source || !isTextMessage(source)) return prev;
+              const duplicate: ChatMessage = {
+                id: `assistant-rendered-${Date.now()}`,
+                role: 'assistant',
+                type: 'text',
+                content: source.content,
+              };
+              return [...prev, duplicate];
+            });
+            upsertActiveThread(thread => {
+              const source = thread.messages.find(m => m.id === streamId);
+              if (!source || !isTextMessage(source)) return { ...thread, updatedAt: Date.now() };
+              const duplicate: ChatMessage = {
+                id: `assistant-rendered-${Date.now() + 1}`,
+                role: 'assistant',
+                type: 'text',
+                content: source.content,
+              };
+              return { ...thread, updatedAt: Date.now(), messages: [...thread.messages, duplicate] };
+            });
             setIsStreaming(false);
             setStreamingMessageId(null);
             queueMicrotask(() => inputRef.current?.focus());
@@ -2339,6 +2474,29 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                     } else {
                       upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
                     }
+                    // Duplicate rendered message for web_search retry path in branch
+                    setMessages(prev => {
+                      const source = prev.find(m => m.id === streamId);
+                      if (!source || !isTextMessage(source)) return prev;
+                      const duplicate: ChatMessage = {
+                        id: `assistant-rendered-${Date.now()}`,
+                        role: 'assistant',
+                        type: 'text',
+                        content: source.content,
+                      };
+                      return [...prev, duplicate];
+                    });
+                    upsertActiveThread(thread => {
+                      const source = thread.messages.find(m => m.id === streamId);
+                      if (!source || !isTextMessage(source)) return { ...thread, updatedAt: Date.now() };
+                      const duplicate: ChatMessage = {
+                        id: `assistant-rendered-${Date.now() + 1}`,
+                        role: 'assistant',
+                        type: 'text',
+                        content: source.content,
+                      };
+                      return { ...thread, updatedAt: Date.now(), messages: [...thread.messages, duplicate] };
+                    });
                     setIsStreaming(false);
                     setStreamingMessageId(null);
                     queueMicrotask(() => inputRef.current?.focus());
@@ -2958,9 +3116,11 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                                   ref={editingTextareaRef}
                                 />
                               ) : (
-                                <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
-                                  {normalizeMathDelimiters(m.content)}
-                                </ReactMarkdown>
+                                <StreamableMarkdown
+                                  text={m.content}
+                                  streaming={isStreaming && streamingMessageId === m.id}
+                                  forcePlain={m.noRender === true}
+                                />
                               )}
                               {isStreaming && streamingMessageId === m.id && (
                                 <div className="mt-2 flex items-center gap-2 text-xs opacity-70">
@@ -3286,9 +3446,11 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                                     ref={editingTextareaRef}
                                   />
                                 ) : (
-                                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
-                                    {normalizeMathDelimiters(it.content)}
-                                  </ReactMarkdown>
+                                  <StreamableMarkdown
+                                    text={it.content}
+                                    streaming={isStreaming && streamingMessageId === it.id}
+                                    forcePlain={it.noRender === true}
+                                  />
                                 )}
                                 {isStreaming && streamingMessageId === it.id && (
                                   <div className="mt-2 flex items-center gap-2 text-xs opacity-70">
@@ -3812,9 +3974,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                             </div>
                           </div>
                         )}
-                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
-                          {normalizeMathDelimiters(writeComposeResult)}
-                        </ReactMarkdown>
+                        <StreamableMarkdown text={writeComposeResult} streaming={isComposeStreaming} />
                       </div>
                       <div className="mt-3 flex items-center gap-3">
                         <button
@@ -3893,9 +4053,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                             </div>
                           </div>
                         )}
-                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
-                          {normalizeMathDelimiters(writeReviseResult)}
-                        </ReactMarkdown>
+                        <StreamableMarkdown text={writeReviseResult} streaming={isReviseStreaming} />
                       </div>
                       <div className="mt-3 flex items-center gap-3">
                         <button
@@ -3972,9 +4130,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                             </div>
                           </div>
                         )}
-                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
-                          {normalizeMathDelimiters(writeGrammarResult)}
-                        </ReactMarkdown>
+                        <StreamableMarkdown text={writeGrammarResult} streaming={isGrammarStreaming} />
                       </div>
                       <div className="mt-3 flex items-center gap-3">
                         <button
@@ -4051,9 +4207,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                             </div>
                           </div>
                         )}
-                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
-                          {normalizeMathDelimiters(writeParaphraseResult)}
-                        </ReactMarkdown>
+                        <StreamableMarkdown text={writeParaphraseResult} streaming={isParaphraseStreaming} />
                       </div>
                       <div className="mt-3 flex items-center gap-3">
                         <button
