@@ -11,6 +11,8 @@ import remarkMath from 'remark-math';
 
 const normalizeMathDelimiters = (input: string): string => {
   if (!input) return input;
+  console.log('--- START DEBUG ---');
+  console.log('Original Input:', input); // 1. Логируем исходный текст
 
   // Normalize line endings first for consistent processing
   let output = input.replace(/\r\n?/g, '\n');
@@ -18,9 +20,11 @@ const normalizeMathDelimiters = (input: string): string => {
   // Convert TeX \[...\] and \(...\) into remark-math block/inline forms
   output = output.replace(/\\\[([\s\S]*?)\\\]/g, (_, inner) => `$$\n${inner}\n$$`);
   output = output.replace(/\\\(([\s\S]*?)\\\)/g, (_, inner) => `$${inner}$`);
+  console.log('After block replace (должны быть $$):', output); // 2. Логируем результат после ПЕРВОЙ замены
 
   // Ensure block math markers are clean: trim spaces on lines that are only '$$'
-  output = output.replace(/^[ \t]*\$\$[ \t]*$/gm, '$$');
+  output = output.replace(/^[ \t]*\$\$[ \t]*$/gm, '$$$$');
+  console.log('After inline replace (должны быть $):', output); // 3. Логируем результат после ВТОРОЙ замены
 
   // Aggressively collapse all spaces and blank lines AROUND block math so it
   // stays attached to surrounding list items (no empty separating paragraphs)
@@ -55,6 +59,9 @@ const normalizeMathDelimiters = (input: string): string => {
 
   // Final safeguard: collapse any residual extra blank lines around $$ again
   output = output.replace(/(^|\n)[ \t]*\n+(?=\$\$)/g, '$1').replace(/(\$\$)[ \t]*\n[ \t]*\n+/g, '$1\n');
+
+  console.log('Final Output:', output); // 4. Логируем финальный результат
+  console.log('--- END DEBUG ---');
 
   return output;
 };
