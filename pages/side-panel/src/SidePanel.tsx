@@ -99,6 +99,15 @@ const UI_I18N = {
     uiOnly: 'UI only',
     toggleTheme: 'Toggle theme',
     screenshot: 'Screenshot',
+    welcome_title: 'How can I assist you today?',
+    welcome_solve_title: 'Solve study problem',
+    welcome_solve_sub: 'Help me solve this math question and provide detailed steps',
+    welcome_write_title: 'Write an essay',
+    welcome_write_sub: 'Assist me in writing a history essay of 1000 words',
+    welcome_read_title: 'Read PDF materials',
+    welcome_read_sub: 'Read and chat with pdf, obtain article interpretations and summaries',
+    welcome_shot_title: 'Take a screenshot',
+    welcome_shot_sub: 'Capture the current page or area to discuss',
     uploadImage: 'Upload image',
     uploadFile: 'Upload PDF',
     newChat: 'New chat',
@@ -186,6 +195,15 @@ const UI_I18N = {
     uiOnly: 'Только UI',
     toggleTheme: 'Сменить тему',
     screenshot: 'Скриншот',
+    welcome_title: 'Чем я могу помочь сегодня?',
+    welcome_solve_title: 'Решить учебную задачу',
+    welcome_solve_sub: 'Помоги решить задачу по математике и распиши подробные шаги',
+    welcome_write_title: 'Написать эссе',
+    welcome_write_sub: 'Помоги написать историческое эссе на 1000 слов',
+    welcome_read_title: 'Чтение PDF материалов',
+    welcome_read_sub: 'Читай и общайся с PDF, получай интерпретации и краткие выводы',
+    welcome_shot_title: 'Сделать скриншот',
+    welcome_shot_sub: 'Захвати текущую страницу или область для обсуждения',
     uploadImage: 'Загрузить изображение',
     uploadFile: 'Загрузить PDF',
     newChat: 'Новый чат',
@@ -924,6 +942,18 @@ const MAX_PDF_BYTES = 10 * 1024 * 1024;
 const SYSTEM_PROMPT_MARKDOWN =
   'You are a helpful AI studing assistant. All of your responses must be formatted using Markdown.';
 
+const ASK_AI_SYSTEM_PROMPT = `You are an AI Homework Helper. Your goal is to help students understand their assignments, not just to give them answers.
+
+[CRITICAL RULE]
+
+When a user asks a question, first determine if it can have a short, direct answer (like a number, date, or a single term).
+
+- If YES: First, state the answer clearly. Then, on a new line, provide a detailed, step-by-step explanation of how to arrive at that answer.
+
+- If NO (the question requires a detailed explanation): Provide the detailed explanation directly.
+
+Always be encouraging and clear in your explanations.`;
+
 // Minimal types for OpenAI Responses API parsing
 type ResponseAnnotation = { url?: string; title?: string };
 type ResponseContent = { text?: string; annotations?: ResponseAnnotation[] };
@@ -1163,12 +1193,7 @@ const uploadFileToOpenAI = async ({ apiKey: _apiKey, file }: { apiKey: string; f
   return id;
 };
 
-const initialAssistant: ChatMessage = {
-  id: 'm-hello',
-  role: 'assistant',
-  type: 'text',
-  content: 'Привет! Это демонстрационный UI чата. Подключения LLM здесь нет.',
-};
+// Removed default assistant greeting message
 
 const STORAGE_KEYS = {
   threads: 'chatThreads',
@@ -1238,6 +1263,31 @@ const SidePanel = () => {
 
   // Read mode state
   const [readFiles, setReadFiles] = useState<ReadFileItem[]>([]);
+
+  // Welcome screen helpers
+  const extensionIconUrl = useMemo(() => {
+    try {
+      return chrome.runtime.getURL('icon-96.png');
+    } catch {
+      return '';
+    }
+  }, []);
+  const handleWelcomeSolve = useCallback(() => {
+    const content =
+      'Please provide the study problem you would like me to solve. I need the problem statement to be able to assist you.';
+    const id = `assistant-${Date.now()}`;
+    const msg: ChatMessage = { id, role: 'assistant', type: 'text', content };
+    setMessages(prev => [...prev, msg]);
+    setThreads(prev =>
+      prev.map(t => (t.id === activeId ? { ...t, updatedAt: Date.now(), messages: [...t.messages, msg] } : t)),
+    );
+  }, [activeId, setThreads]);
+  const handleWelcomeWrite = useCallback(() => setMode('write'), []);
+  const handleWelcomeRead = useCallback(() => setMode('read'), []);
+  const handleWelcomeScreenshot = useCallback(() => {
+    setScreenshotActive(true);
+    chrome.runtime.sendMessage({ type: 'SCREENSHOT_REQUEST' }).catch(() => setScreenshotActive(false));
+  }, []);
   const [readDragging, setReadDragging] = useState<boolean>(false);
   const [readActiveId, setReadActiveId] = useState<string | null>(null);
 
@@ -1354,7 +1404,7 @@ const SidePanel = () => {
             title: localeForInit === 'ru' ? 'Новый чат' : 'New chat',
             createdAt: Date.now(),
             updatedAt: Date.now(),
-            messages: [initialAssistant],
+            messages: [],
           };
           setThreads([initial]);
           setActiveId(id);
@@ -1571,7 +1621,7 @@ const SidePanel = () => {
         : inputPayload;
 
     const finalInput = [
-      { role: 'system', content: [{ type: 'input_text', text: SYSTEM_PROMPT_MARKDOWN }] },
+      { role: 'system', content: [{ type: 'input_text', text: ASK_AI_SYSTEM_PROMPT }] },
       ...inputWithFiles,
     ];
 
@@ -2028,7 +2078,7 @@ const SidePanel = () => {
         createdAt: Date.now(),
         updatedAt: Date.now(),
         linkedPdfId: item.id,
-        messages: [initialAssistant],
+        messages: [],
       };
 
       setThreads(prev => [initial, ...prev]);
@@ -2327,7 +2377,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
       title: uiLocale === 'ru' ? 'Новый чат' : 'New chat',
       createdAt: Date.now(),
       updatedAt: Date.now(),
-      messages: [initialAssistant],
+      messages: [],
     };
     setThreads(prev => [thread, ...prev]);
     setActiveId(id);
@@ -2420,7 +2470,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
       const model = llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini';
       const inputPayload = buildHistoryInputItemsFrom(kept, 5);
       const branchInput = [
-        { role: 'system', content: [{ type: 'input_text', text: SYSTEM_PROMPT_MARKDOWN }] },
+        { role: 'system', content: [{ type: 'input_text', text: ASK_AI_SYSTEM_PROMPT }] },
         ...inputPayload,
       ];
 
@@ -2791,11 +2841,11 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
 
       const regenInput: Array<Record<string, unknown>> = Array.isArray(inputPayload)
         ? [
-            { role: 'system', content: [{ type: 'input_text', text: SYSTEM_PROMPT_MARKDOWN }] },
+            { role: 'system', content: [{ type: 'input_text', text: ASK_AI_SYSTEM_PROMPT }] },
             ...((inputPayload as Array<Record<string, unknown>>) || []),
           ]
         : [
-            { role: 'system', content: [{ type: 'input_text', text: SYSTEM_PROMPT_MARKDOWN }] },
+            { role: 'system', content: [{ type: 'input_text', text: ASK_AI_SYSTEM_PROMPT }] },
             { role: 'user', content: [{ type: 'input_text', text: String(inputPayload) }] },
           ];
 
@@ -2941,7 +2991,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
             title: uiLocale === 'ru' ? 'Новый чат' : 'New chat',
             createdAt: Date.now(),
             updatedAt: Date.now(),
-            messages: [initialAssistant],
+            messages: [],
           };
           setThreads([thread]);
           setActiveId(nid);
@@ -3267,6 +3317,232 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
             )}>
             {mode === 'ask' ? (
               <div className="flex flex-col gap-3">
+                {messages.length === 0 && (
+                  <div className="flex min-h-[60vh] flex-col items-center justify-center gap-6 py-10">
+                    <div className="flex flex-col items-center gap-3">
+                      {extensionIconUrl ? (
+                        <img
+                          src={extensionIconUrl}
+                          alt="Extension icon"
+                          className="h-14 w-14 rounded-xl ring-1 ring-black/10 dark:ring-white/10"
+                        />
+                      ) : (
+                        <div
+                          className={cn(
+                            'flex h-14 w-14 items-center justify-center rounded-xl ring-1',
+                            isLight ? 'bg-white ring-black/10' : 'bg-slate-700 ring-white/10',
+                          )}>
+                          <span aria-hidden="true" className="text-xl">
+                            ✨
+                          </span>
+                        </div>
+                      )}
+                      <div className="text-center text-2xl font-semibold">
+                        {t.welcome_title ?? 'How can I assist you today?'}
+                      </div>
+                    </div>
+                    <div className="w-full max-w-xl space-y-3">
+                      <button
+                        onClick={handleWelcomeSolve}
+                        className={cn(
+                          'group flex w-full items-center justify-between gap-3 rounded-2xl p-4 ring-1 transition-colors',
+                          isLight
+                            ? 'bg-white ring-black/10 hover:bg-slate-50'
+                            : 'bg-slate-700 ring-white/10 hover:bg-slate-600',
+                        )}>
+                        <div className="flex items-center gap-3 text-left">
+                          <span
+                            aria-hidden="true"
+                            className={cn(
+                              'flex h-10 w-10 items-center justify-center rounded-lg',
+                              isLight ? 'bg-violet-100 text-violet-700' : 'bg-violet-700/30 text-violet-200',
+                            )}>
+                            <svg
+                              width="22"
+                              height="22"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2">
+                              <path d="M4 19.5V6a2 2 0 0 1 2-2h9" />
+                              <path d="M16 2l6 6" />
+                              <path d="M8 7h8" />
+                              <path d="M8 11h5" />
+                              <path d="M8 15h4" />
+                              <path d="M16 2v6h6" />
+                            </svg>
+                          </span>
+                          <div>
+                            <div className="text-base font-semibold">
+                              {t.welcome_solve_title ?? 'Solve study problem'}
+                            </div>
+                            <div className="text-sm opacity-70">
+                              {t.welcome_solve_sub ?? 'Help me solve this math question and provide detailed steps'}
+                            </div>
+                          </div>
+                        </div>
+                        <span aria-hidden className="opacity-40 group-hover:opacity-60">
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2">
+                            <path d="M5 12h12" />
+                            <path d="M13 6l6 6-6 6" />
+                          </svg>
+                        </span>
+                      </button>
+                      <button
+                        onClick={handleWelcomeWrite}
+                        className={cn(
+                          'group flex w-full items-center justify-between gap-3 rounded-2xl p-4 ring-1 transition-colors',
+                          isLight
+                            ? 'bg-white ring-black/10 hover:bg-slate-50'
+                            : 'bg-slate-700 ring-white/10 hover:bg-slate-600',
+                        )}>
+                        <div className="flex items-center gap-3 text-left">
+                          <span
+                            aria-hidden="true"
+                            className={cn(
+                              'flex h-10 w-10 items-center justify-center rounded-lg',
+                              isLight ? 'bg-amber-100 text-amber-700' : 'bg-amber-700/30 text-amber-200',
+                            )}>
+                            <svg
+                              width="22"
+                              height="22"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2">
+                              <path d="M3 5h18" />
+                              <path d="M3 10h18" />
+                              <path d="M3 15h10" />
+                              <path d="M14 19l3-3 4 4" />
+                            </svg>
+                          </span>
+                          <div>
+                            <div className="text-base font-semibold">{t.welcome_write_title ?? 'Write an essay'}</div>
+                            <div className="text-sm opacity-70">
+                              {t.welcome_write_sub ?? 'Assist me in writing a history essay of 1000 words'}
+                            </div>
+                          </div>
+                        </div>
+                        <span aria-hidden className="opacity-40 group-hover:opacity-60">
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2">
+                            <path d="M5 12h12" />
+                            <path d="M13 6l6 6-6 6" />
+                          </svg>
+                        </span>
+                      </button>
+                      <button
+                        onClick={handleWelcomeRead}
+                        className={cn(
+                          'group flex w-full items-center justify-between gap-3 rounded-2xl p-4 ring-1 transition-colors',
+                          isLight
+                            ? 'bg-white ring-black/10 hover:bg-slate-50'
+                            : 'bg-slate-700 ring-white/10 hover:bg-slate-600',
+                        )}>
+                        <div className="flex items-center gap-3 text-left">
+                          <span
+                            aria-hidden="true"
+                            className={cn(
+                              'flex h-10 w-10 items-center justify-center rounded-lg',
+                              isLight ? 'bg-sky-100 text-sky-700' : 'bg-sky-700/30 text-sky-200',
+                            )}>
+                            <svg
+                              width="22"
+                              height="22"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2">
+                              <rect x="3" y="4" width="18" height="16" rx="2" />
+                              <path d="M7 8h6" />
+                              <path d="M7 12h10" />
+                              <path d="M7 16h8" />
+                            </svg>
+                          </span>
+                          <div>
+                            <div className="text-base font-semibold">
+                              {t.welcome_read_title ?? 'Read PDF materials'}
+                            </div>
+                            <div className="text-sm opacity-70">
+                              {t.welcome_read_sub ??
+                                'Read and chat with pdf, obtain article interpretations and summaries'}
+                            </div>
+                          </div>
+                        </div>
+                        <span aria-hidden className="opacity-40 group-hover:opacity-60">
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2">
+                            <path d="M5 12h12" />
+                            <path d="M13 6l6 6-6 6" />
+                          </svg>
+                        </span>
+                      </button>
+                      <button
+                        onClick={handleWelcomeScreenshot}
+                        className={cn(
+                          'group flex w-full items-center justify-between gap-3 rounded-2xl p-4 ring-1 transition-colors',
+                          isLight
+                            ? 'bg-white ring-black/10 hover:bg-slate-50'
+                            : 'bg-slate-700 ring-white/10 hover:bg-slate-600',
+                        )}>
+                        <div className="flex items-center gap-3 text-left">
+                          <span
+                            aria-hidden="true"
+                            className={cn(
+                              'flex h-10 w-10 items-center justify-center rounded-lg',
+                              isLight ? 'bg-emerald-100 text-emerald-700' : 'bg-emerald-700/30 text-emerald-200',
+                            )}>
+                            <svg
+                              width="22"
+                              height="22"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2">
+                              <rect x="3" y="7" width="18" height="14" rx="2" />
+                              <circle cx="12" cy="14" r="4" />
+                              <path d="M9 7l1.5-2h3L15 7" />
+                            </svg>
+                          </span>
+                          <div>
+                            <div className="text-base font-semibold">{t.welcome_shot_title ?? 'Take a screenshot'}</div>
+                            <div className="text-sm opacity-70">
+                              {t.welcome_shot_sub ?? 'Capture the current page or area to discuss'}
+                            </div>
+                          </div>
+                        </div>
+                        <span aria-hidden className="opacity-40 group-hover:opacity-60">
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2">
+                            <path d="M5 12h12" />
+                            <path d="M13 6l6 6-6 6" />
+                          </svg>
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                )}
                 {renderBlocks.map(block => {
                   if (block.kind === 'single') {
                     const m = block.item;
