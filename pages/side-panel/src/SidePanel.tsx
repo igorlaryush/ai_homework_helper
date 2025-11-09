@@ -70,7 +70,7 @@ const StreamableMarkdown = ({
   const content = text ?? '';
   if (!content) return null;
 
-  if (streaming || forcePlain) {
+  if (forcePlain) {
     return <div className="whitespace-pre-wrap break-words">{content}</div>;
   }
 
@@ -78,7 +78,7 @@ const StreamableMarkdown = ({
     <ReactMarkdown
       remarkPlugins={[remarkMath, remarkGfm]}
       rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false, trust: true }]]}
-      key={content}>
+      key={`${streaming ? 's:' : ''}${content}`}>
       {normalizeMathDelimiters(content)}
     </ReactMarkdown>
   );
@@ -1634,24 +1634,16 @@ const SidePanel = () => {
     const model = llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini';
     const inputPayload = buildHistoryInputItemsFrom(allMessagesForContext, 5);
 
-    // Streaming placeholder messages (raw first, then processed, then rendered on completion)
+    // Streaming message: render markdown live as it streams
     const streamId = `assistant-${Date.now() + 1}`;
-    setMessages(prev => [...prev, { id: streamId, role: 'assistant', type: 'text', content: '', noRender: true }]);
+    setMessages(prev => [...prev, { id: streamId, role: 'assistant', type: 'text', content: '' }]);
     upsertActiveThread(thread => ({
       ...thread,
       updatedAt: Date.now(),
-      messages: [...thread.messages, { id: streamId, role: 'assistant', type: 'text', content: '', noRender: true }],
+      messages: [...thread.messages, { id: streamId, role: 'assistant', type: 'text', content: '' }],
     }));
     setIsStreaming(true);
     setStreamingMessageId(streamId);
-
-    const processedId = `assistant-processed-${Date.now() + 2}`;
-    setMessages(prev => [...prev, { id: processedId, role: 'assistant', type: 'text', content: '', noRender: true }]);
-    upsertActiveThread(thread => ({
-      ...thread,
-      updatedAt: Date.now(),
-      messages: [...thread.messages, { id: processedId, role: 'assistant', type: 'text', content: '', noRender: true }],
-    }));
 
     // Upload file attachments via Files API to enable file_search
     const fileAttachmentIds = attachmentsSnapshot.filter(a => a.kind === 'file').map(a => a.id);
@@ -1736,8 +1728,6 @@ const SidePanel = () => {
               const nextRaw = String(currentRaw ?? '') + chunk;
               return prev.map(m => {
                 if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
-                if (m.id === processedId && m.type === 'text')
-                  return { ...m, content: normalizeMathDelimiters(nextRaw) };
                 return m;
               });
             });
@@ -1749,8 +1739,6 @@ const SidePanel = () => {
                 ...thread,
                 messages: thread.messages.map(m => {
                   if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
-                  if (m.id === processedId && m.type === 'text')
-                    return { ...m, content: normalizeMathDelimiters(nextRaw) };
                   return m;
                 }),
               };
@@ -1777,8 +1765,6 @@ const SidePanel = () => {
                 const nextRaw = String(currentRaw ?? '') + suffix;
                 return prev.map(m => {
                   if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
-                  if (m.id === processedId && m.type === 'text')
-                    return { ...m, content: normalizeMathDelimiters(nextRaw) };
                   return m;
                 });
               });
@@ -1791,8 +1777,6 @@ const SidePanel = () => {
                   updatedAt: Date.now(),
                   messages: thread.messages.map(m => {
                     if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
-                    if (m.id === processedId && m.type === 'text')
-                      return { ...m, content: normalizeMathDelimiters(nextRaw) };
                     return m;
                   }),
                 };
@@ -1800,29 +1784,6 @@ const SidePanel = () => {
             } else {
               upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
             }
-            // Duplicate rendered message after stream completes
-            setMessages(prev => {
-              const source = prev.find(m => m.id === streamId);
-              if (!source || !isTextMessage(source)) return prev;
-              const duplicate: ChatMessage = {
-                id: `assistant-rendered-${Date.now()}`,
-                role: 'assistant',
-                type: 'text',
-                content: source.content,
-              };
-              return [...prev, duplicate];
-            });
-            upsertActiveThread(thread => {
-              const source = thread.messages.find(m => m.id === streamId);
-              if (!source || !isTextMessage(source)) return { ...thread, updatedAt: Date.now() };
-              const duplicate: ChatMessage = {
-                id: `assistant-rendered-${Date.now() + 1}`,
-                role: 'assistant',
-                type: 'text',
-                content: source.content,
-              };
-              return { ...thread, updatedAt: Date.now(), messages: [...thread.messages, duplicate] };
-            });
             setIsStreaming(false);
             setStreamingMessageId(null);
             queueMicrotask(() => inputRef.current?.focus());
@@ -1858,8 +1819,6 @@ const SidePanel = () => {
                         const nextRaw = String(currentRaw ?? '') + chunk;
                         return prev.map(m => {
                           if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
-                          if (m.id === processedId && m.type === 'text')
-                            return { ...m, content: normalizeMathDelimiters(nextRaw) };
                           return m;
                         });
                       });
@@ -1871,8 +1830,6 @@ const SidePanel = () => {
                           ...thread,
                           messages: thread.messages.map(m => {
                             if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
-                            if (m.id === processedId && m.type === 'text')
-                              return { ...m, content: normalizeMathDelimiters(nextRaw) };
                             return m;
                           }),
                         };
@@ -1896,8 +1853,6 @@ const SidePanel = () => {
                           const nextRaw = String(currentRaw ?? '') + suffix;
                           return prev.map(m => {
                             if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
-                            if (m.id === processedId && m.type === 'text')
-                              return { ...m, content: normalizeMathDelimiters(nextRaw) };
                             return m;
                           });
                         });
@@ -1910,8 +1865,6 @@ const SidePanel = () => {
                             updatedAt: Date.now(),
                             messages: thread.messages.map(m => {
                               if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
-                              if (m.id === processedId && m.type === 'text')
-                                return { ...m, content: normalizeMathDelimiters(nextRaw) };
                               return m;
                             }),
                           };
@@ -1919,29 +1872,6 @@ const SidePanel = () => {
                       } else {
                         upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
                       }
-                      // Duplicate rendered message after stream completes (retry path without web_search)
-                      setMessages(prev => {
-                        const source = prev.find(m => m.id === streamId);
-                        if (!source || !isTextMessage(source)) return prev;
-                        const duplicate: ChatMessage = {
-                          id: `assistant-rendered-${Date.now()}`,
-                          role: 'assistant',
-                          type: 'text',
-                          content: source.content,
-                        };
-                        return [...prev, duplicate];
-                      });
-                      upsertActiveThread(thread => {
-                        const source = thread.messages.find(m => m.id === streamId);
-                        if (!source || !isTextMessage(source)) return { ...thread, updatedAt: Date.now() };
-                        const duplicate: ChatMessage = {
-                          id: `assistant-rendered-${Date.now() + 1}`,
-                          role: 'assistant',
-                          type: 'text',
-                          content: source.content,
-                        };
-                        return { ...thread, updatedAt: Date.now(), messages: [...thread.messages, duplicate] };
-                      });
                       setIsStreaming(false);
                       setStreamingMessageId(null);
                       queueMicrotask(() => inputRef.current?.focus());
@@ -1992,8 +1922,6 @@ const SidePanel = () => {
                         const nextRaw = String(currentRaw ?? '') + chunk;
                         return prev.map(m => {
                           if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
-                          if (m.id === processedId && m.type === 'text')
-                            return { ...m, content: normalizeMathDelimiters(nextRaw) };
                           return m;
                         });
                       });
@@ -2635,25 +2563,14 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
       lastRequestRef.current = { model, inputPayload };
 
       const streamId = `assistant-${Date.now() + 1}`;
-      setMessages(prev => [...prev, { id: streamId, role: 'assistant', type: 'text', content: '', noRender: true }]);
+      setMessages(prev => [...prev, { id: streamId, role: 'assistant', type: 'text', content: '' }]);
       upsertActiveThread(thread => ({
         ...thread,
         updatedAt: Date.now(),
-        messages: [...thread.messages, { id: streamId, role: 'assistant', type: 'text', content: '', noRender: true }],
+        messages: [...thread.messages, { id: streamId, role: 'assistant', type: 'text', content: '' }],
       }));
       setIsStreaming(true);
       setStreamingMessageId(streamId);
-
-      const processedId = `assistant-processed-${Date.now() + 2}`;
-      setMessages(prev => [...prev, { id: processedId, role: 'assistant', type: 'text', content: '', noRender: true }]);
-      upsertActiveThread(thread => ({
-        ...thread,
-        updatedAt: Date.now(),
-        messages: [
-          ...thread.messages,
-          { id: processedId, role: 'assistant', type: 'text', content: '', noRender: true },
-        ],
-      }));
 
       const combinedTools: Array<{ type: 'web_search' }> = [];
       if (webAccessEnabled) combinedTools.push({ type: 'web_search' });
@@ -2681,8 +2598,6 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                 const nextRaw = String(currentRaw ?? '') + chunk;
                 return prev.map(m => {
                   if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
-                  if (m.id === processedId && m.type === 'text')
-                    return { ...m, content: normalizeMathDelimiters(nextRaw) };
                   return m;
                 });
               });
@@ -2694,8 +2609,6 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                   ...thread,
                   messages: thread.messages.map(m => {
                     if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
-                    if (m.id === processedId && m.type === 'text')
-                      return { ...m, content: normalizeMathDelimiters(nextRaw) };
                     return m;
                   }),
                 };
@@ -2724,8 +2637,6 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                   const nextRaw = String(currentRaw ?? '') + suffix;
                   return prev.map(m => {
                     if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
-                    if (m.id === processedId && m.type === 'text')
-                      return { ...m, content: normalizeMathDelimiters(nextRaw) };
                     return m;
                   });
                 });
@@ -2738,8 +2649,6 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                     updatedAt: Date.now(),
                     messages: thread.messages.map(m => {
                       if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
-                      if (m.id === processedId && m.type === 'text')
-                        return { ...m, content: normalizeMathDelimiters(nextRaw) };
                       return m;
                     }),
                   };
@@ -2747,29 +2656,6 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
               } else {
                 upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
               }
-              // Duplicate rendered message for branch
-              setMessages(prev => {
-                const source = prev.find(m => m.id === streamId);
-                if (!source || !isTextMessage(source)) return prev;
-                const duplicate: ChatMessage = {
-                  id: `assistant-rendered-${Date.now()}`,
-                  role: 'assistant',
-                  type: 'text',
-                  content: source.content,
-                };
-                return [...prev, duplicate];
-              });
-              upsertActiveThread(thread => {
-                const source = thread.messages.find(m => m.id === streamId);
-                if (!source || !isTextMessage(source)) return { ...thread, updatedAt: Date.now() };
-                const duplicate: ChatMessage = {
-                  id: `assistant-rendered-${Date.now() + 1}`,
-                  role: 'assistant',
-                  type: 'text',
-                  content: source.content,
-                };
-                return { ...thread, updatedAt: Date.now(), messages: [...thread.messages, duplicate] };
-              });
               setIsStreaming(false);
               setStreamingMessageId(null);
               queueMicrotask(() => inputRef.current?.focus());
@@ -2799,8 +2685,6 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                         const nextRaw = String(currentRaw ?? '') + chunk;
                         return prev.map(m => {
                           if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
-                          if (m.id === processedId && m.type === 'text')
-                            return { ...m, content: normalizeMathDelimiters(nextRaw) };
                           return m;
                         });
                       });
@@ -2812,8 +2696,6 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                           ...thread,
                           messages: thread.messages.map(m => {
                             if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
-                            if (m.id === processedId && m.type === 'text')
-                              return { ...m, content: normalizeMathDelimiters(nextRaw) };
                             return m;
                           }),
                         };
@@ -2837,8 +2719,6 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                           const nextRaw = String(currentRaw ?? '') + suffix;
                           return prev.map(m => {
                             if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
-                            if (m.id === processedId && m.type === 'text')
-                              return { ...m, content: normalizeMathDelimiters(nextRaw) };
                             return m;
                           });
                         });
@@ -2851,8 +2731,6 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                             updatedAt: Date.now(),
                             messages: thread.messages.map(m => {
                               if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
-                              if (m.id === processedId && m.type === 'text')
-                                return { ...m, content: normalizeMathDelimiters(nextRaw) };
                               return m;
                             }),
                           };
@@ -2860,29 +2738,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                       } else {
                         upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
                       }
-                      // Duplicate rendered message for web_search retry path in branch
-                      setMessages(prev => {
-                        const source = prev.find(m => m.id === streamId);
-                        if (!source || !isTextMessage(source)) return prev;
-                        const duplicate: ChatMessage = {
-                          id: `assistant-rendered-${Date.now()}`,
-                          role: 'assistant',
-                          type: 'text',
-                          content: source.content,
-                        };
-                        return [...prev, duplicate];
-                      });
-                      upsertActiveThread(thread => {
-                        const source = thread.messages.find(m => m.id === streamId);
-                        if (!source || !isTextMessage(source)) return { ...thread, updatedAt: Date.now() };
-                        const duplicate: ChatMessage = {
-                          id: `assistant-rendered-${Date.now() + 1}`,
-                          role: 'assistant',
-                          type: 'text',
-                          content: source.content,
-                        };
-                        return { ...thread, updatedAt: Date.now(), messages: [...thread.messages, duplicate] };
-                      });
+                      // No duplication; we already stream-render the same message
                       setIsStreaming(false);
                       setStreamingMessageId(null);
                       queueMicrotask(() => inputRef.current?.focus());
@@ -2924,8 +2780,6 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                         const nextRaw = String(currentRaw ?? '') + chunk;
                         return prev.map(m => {
                           if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
-                          if (m.id === processedId && m.type === 'text')
-                            return { ...m, content: normalizeMathDelimiters(nextRaw) };
                           return m;
                         });
                       });
