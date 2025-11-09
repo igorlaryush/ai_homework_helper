@@ -158,16 +158,18 @@ chrome.runtime.onMessage.addListener((message, sender) => {
                     chrome.runtime.sendMessage({ type: 'SCREENSHOT_CANCELLED' }).catch(() => undefined);
                     return;
                   }
-                  // Retry after successful injection
-                  chrome.tabs.sendMessage(tabId, { type: 'BEGIN_SELECTION' }, () => {
-                    const retryError = chrome.runtime.lastError;
-                    if (retryError) {
-                      console.error(`${LOG_PREFIX} Retry BEGIN_SELECTION failed`, retryError);
-                      chrome.runtime.sendMessage({ type: 'SCREENSHOT_CANCELLED' }).catch(() => undefined);
-                    } else {
-                      console.debug(`${LOG_PREFIX} BEGIN_SELECTION delivered after injection`, { tabId });
-                    }
-                  });
+                  // Retry shortly after successful injection to ensure listeners are ready
+                  setTimeout(() => {
+                    chrome.tabs.sendMessage(tabId, { type: 'BEGIN_SELECTION' }, () => {
+                      const retryError = chrome.runtime.lastError;
+                      if (retryError) {
+                        console.error(`${LOG_PREFIX} Retry BEGIN_SELECTION failed`, retryError);
+                        chrome.runtime.sendMessage({ type: 'SCREENSHOT_CANCELLED' }).catch(() => undefined);
+                      } else {
+                        console.debug(`${LOG_PREFIX} BEGIN_SELECTION delivered after injection`, { tabId });
+                      }
+                    });
+                  }, 80);
                 });
               } catch (e) {
                 console.error(`${LOG_PREFIX} executeScript threw`, e);

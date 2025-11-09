@@ -7,6 +7,9 @@
   text-align: left;
   height: 100%;
   padding: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-variant-numeric: tabular-nums;
 }
 
 .App-logo {
@@ -27,4 +30,26 @@ code {
   background: rgba(148, 163, 184, 0.5);
   border-radius: 0.25rem;
   padding: 0.2rem 0.5rem;
+}
+
+/* Smooth, minimal scrollbars */
+.App *::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.App *::-webkit-scrollbar-thumb {
+  background-color: rgba(100, 116, 139, 0.5); /* slate-500/50 */
+  border-radius: 9999px;
+}
+.App *::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(99, 102, 241, 0.75); /* violet-500/75 */
+}
+.App *::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+.dark .App *::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.35); /* slate-400/35 */
+}
+.dark .App *::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(139, 92, 246, 0.7); /* violet-500/70 */
 }

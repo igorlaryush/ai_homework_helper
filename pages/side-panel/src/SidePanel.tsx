@@ -2,7 +2,7 @@ import '@src/SidePanel.css';
 import 'katex/dist/katex.min.css';
 import { useStorage, withErrorBoundary, withSuspense } from '@extension/shared';
 import { exampleThemeStorage } from '@extension/storage';
-import { cn, ErrorDisplay, LoadingSpinner } from '@extension/ui';
+import { cn, ErrorDisplay, LoadingSpinner, IconButton } from '@extension/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
@@ -11,20 +11,15 @@ import remarkMath from 'remark-math';
 
 const normalizeMathDelimiters = (input: string): string => {
   if (!input) return input;
-  console.log('--- START DEBUG ---');
-  console.log('Original Input:', input); // 1. Логируем исходный текст
-
   // Normalize line endings first for consistent processing
   let output = input.replace(/\r\n?/g, '\n');
 
   // Convert TeX \[...\] and \(...\) into remark-math block/inline forms
   output = output.replace(/\\\[([\s\S]*?)\\\]/g, (_, inner) => `$$\n${inner}\n$$`);
   output = output.replace(/\\\(([\s\S]*?)\\\)/g, (_, inner) => `$${inner}$`);
-  console.log('After block replace (должны быть $$):', output); // 2. Логируем результат после ПЕРВОЙ замены
 
   // Ensure block math markers are clean: trim spaces on lines that are only '$$'
   output = output.replace(/^[ \t]*\$\$[ \t]*$/gm, '$$$$');
-  console.log('After inline replace (должны быть $):', output); // 3. Логируем результат после ВТОРОЙ замены
 
   // Aggressively collapse all spaces and blank lines AROUND block math so it
   // stays attached to surrounding list items (no empty separating paragraphs)
@@ -59,9 +54,6 @@ const normalizeMathDelimiters = (input: string): string => {
 
   // Final safeguard: collapse any residual extra blank lines around $$ again
   output = output.replace(/(^|\n)[ \t]*\n+(?=\$\$)/g, '$1').replace(/(\$\$)[ \t]*\n[ \t]*\n+/g, '$1\n');
-
-  console.log('Final Output:', output); // 4. Логируем финальный результат
-  console.log('--- END DEBUG ---');
 
   return output;
 };
@@ -114,6 +106,7 @@ const UI_I18N = {
     removeAttachment: 'Remove attachment',
     placeholder: 'Type a message... (Enter — send, Shift+Enter — new line)',
     uiNote: 'UI only. No LLM connected.',
+    compact: 'Compact mode',
     langButton: 'Language',
     lang_en: 'English (English)',
     lang_ru: 'Russian (Русский)',
@@ -210,6 +203,7 @@ const UI_I18N = {
     removeAttachment: 'Удалить вложение',
     placeholder: 'Введите сообщение... (Enter — отправить, Shift+Enter — новая строка)',
     uiNote: 'Только UI. Подключение LLM не выполнено.',
+    compact: 'Компактный режим',
     langButton: 'Язык',
     lang_en: 'English (English)',
     lang_ru: 'Russian (Русский)',
@@ -297,6 +291,7 @@ const UI_I18N = {
     removeAttachment: 'Видалити вкладення',
     placeholder: 'Введіть повідомлення... (Enter — надіслати, Shift+Enter — новий рядок)',
     uiNote: 'Лише UI. Підключення LLM не виконано.',
+    compact: 'Компактний режим',
     langButton: 'Мова',
     lang_en: 'English (English)',
     lang_ru: 'Russian (Русский)',
@@ -384,6 +379,7 @@ const UI_I18N = {
     removeAttachment: 'Anhang entfernen',
     placeholder: 'Nachricht eingeben... (Enter — senden, Shift+Enter — neue Zeile)',
     uiNote: 'Nur UI. Keine LLM-Verbindung.',
+    compact: 'Kompaktmodus',
     langButton: 'Sprache',
     lang_en: 'English (English)',
     lang_ru: 'Russian (Русский)',
@@ -471,6 +467,7 @@ const UI_I18N = {
     removeAttachment: 'Supprimer la pièce jointe',
     placeholder: 'Saisissez un message... (Entrée — envoyer, Maj+Entrée — nouvelle ligne)',
     uiNote: 'Interface uniquement. Pas de connexion LLM.',
+    compact: 'Mode compact',
     langButton: 'Langue',
     lang_en: 'English (English)',
     lang_ru: 'Russian (Русский)',
@@ -558,6 +555,7 @@ const UI_I18N = {
     removeAttachment: 'Eliminar adjunto',
     placeholder: 'Escribe un mensaje... (Enter — enviar, Shift+Enter — nueva línea)',
     uiNote: 'Solo IU. Sin conexión LLM.',
+    compact: 'Modo compacto',
     langButton: 'Idioma',
     lang_en: 'English (English)',
     lang_ru: 'Russian (Русский)',
@@ -645,6 +643,7 @@ const UI_I18N = {
     removeAttachment: 'Remover anexo',
     placeholder: 'Digite uma mensagem... (Enter — enviar, Shift+Enter — nova linha)',
     uiNote: 'Somente UI. Sem conexão LLM.',
+    compact: 'Modo compacto',
     langButton: 'Idioma',
     lang_en: 'English (English)',
     lang_ru: 'Russian (Русский)',
@@ -732,6 +731,7 @@ const UI_I18N = {
     removeAttachment: 'Eki kaldır',
     placeholder: 'Mesaj yazın... (Enter — gönder, Shift+Enter — yeni satır)',
     uiNote: 'Yalnızca arayüz. LLM bağlantısı yok.',
+    compact: 'Kompakt mod',
     langButton: 'Dil',
     lang_en: 'English (English)',
     lang_ru: 'Russian (Русский)',
@@ -819,6 +819,7 @@ const UI_I18N = {
     removeAttachment: '移除附件',
     placeholder: '输入消息…（回车发送，Shift+回车换行）',
     uiNote: '仅界面。未连接 LLM。',
+    compact: '紧凑模式',
     langButton: '语言',
     lang_en: 'English (English)',
     lang_ru: 'Russian (Русский)',
@@ -989,7 +990,7 @@ type StreamCallbacks = {
 };
 
 const streamResponsesApi = async (
-  { apiKey: _apiKey, body }: { apiKey: string; body: Record<string, unknown> },
+  { apiKey: _apiKey, body, signal }: { apiKey: string; body: Record<string, unknown>; signal?: AbortSignal },
   { onDelta, onDone, onError }: StreamCallbacks,
 ): Promise<void> => {
   // Mark unused when using backend proxy
@@ -1002,6 +1003,7 @@ const streamResponsesApi = async (
         Accept: 'text/event-stream',
       },
       body: JSON.stringify({ ...body, stream: true }),
+      signal,
     });
     if (!res.ok) {
       let bodyText = '';
@@ -1020,6 +1022,7 @@ const streamResponsesApi = async (
               Accept: 'application/json',
             },
             body: JSON.stringify({ ...body, stream: false }),
+            signal,
           });
           if (nonStream.ok) {
             const json = (await nonStream.json()) as ResponsesResult;
@@ -1061,6 +1064,7 @@ const streamResponsesApi = async (
             Accept: 'application/json',
           },
           body: JSON.stringify({ ...body, stream: false }),
+          signal,
         });
         if (nonStream.ok) {
           const json = (await nonStream.json()) as ResponsesResult;
@@ -1201,6 +1205,7 @@ const STORAGE_KEYS = {
   webAccess: 'webAccessEnabled',
   llmModel: 'llmModel',
   readRecent: 'readRecentFiles',
+  compactMode: 'compactMode',
 } as const;
 
 const SidePanel = () => {
@@ -1230,6 +1235,7 @@ const SidePanel = () => {
   type UILocale = 'en' | 'ru' | 'de' | 'es' | 'fr' | 'pt' | 'uk' | 'tr' | 'zh';
   const [uiLocale, setUiLocale] = useState<UILocale>('en');
   const [langOpen, setLangOpen] = useState<boolean>(false);
+  const [compactMode, setCompactMode] = useState<boolean>(false);
   // Editing state for user messages
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState<string>('');
@@ -1260,6 +1266,7 @@ const SidePanel = () => {
   const [isReviseStreaming, setIsReviseStreaming] = useState<boolean>(false);
   const [isGrammarStreaming, setIsGrammarStreaming] = useState<boolean>(false);
   const [isParaphraseStreaming, setIsParaphraseStreaming] = useState<boolean>(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   // Read mode state
   const [readFiles, setReadFiles] = useState<ReadFileItem[]>([]);
@@ -1375,6 +1382,7 @@ const SidePanel = () => {
         STORAGE_KEYS.webAccess,
         STORAGE_KEYS.llmModel,
         STORAGE_KEYS.readRecent,
+        STORAGE_KEYS.compactMode,
       ])
       .then(store => {
         const v = store?.uiLocale as UILocale | undefined;
@@ -1391,6 +1399,8 @@ const SidePanel = () => {
 
         const loadedRead = (store?.[STORAGE_KEYS.readRecent] as ReadFileItem[] | undefined) ?? [];
         setReadFiles(loadedRead);
+        const loadedCompact = store?.[STORAGE_KEYS.compactMode] as boolean | undefined;
+        if (typeof loadedCompact === 'boolean') setCompactMode(loadedCompact);
 
         // No local API key is used
 
@@ -1435,6 +1445,9 @@ const SidePanel = () => {
   useEffect(() => {
     void chrome.storage?.local.set({ [STORAGE_KEYS.readRecent]: readFiles });
   }, [readFiles]);
+  useEffect(() => {
+    void chrome.storage?.local.set({ [STORAGE_KEYS.compactMode]: compactMode });
+  }, [compactMode]);
   // No local API key is persisted
 
   // Keep previous_response_id ref in sync with the active thread (survives reload via storage -> threads)
@@ -1633,64 +1646,28 @@ const SidePanel = () => {
     const combinedTools: Array<{ type: 'web_search' }> = [];
     if (webAccessEnabled) combinedTools.push({ type: 'web_search' });
 
-    void streamResponsesApi(
-      {
-        apiKey: key,
-        body: {
-          model,
-          input: finalInput,
-          text: { format: { type: 'text' } },
-          // Enable web_search if requested; files are passed via input_file
-          ...(combinedTools.length > 0 ? { tools: combinedTools, tool_choice: 'auto' as const } : {}),
-          ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
+    {
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
+      void streamResponsesApi(
+        {
+          apiKey: key,
+          body: {
+            model,
+            input: finalInput,
+            text: { format: { type: 'text' } },
+            // Enable web_search if requested; files are passed via input_file
+            ...(combinedTools.length > 0 ? { tools: combinedTools, tool_choice: 'auto' as const } : {}),
+            ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
+          },
+          signal: ctrl.signal,
         },
-      },
-      {
-        onDelta: chunk => {
-          setMessages(prev => {
-            const rawMsg = prev.find(m => m.id === streamId && m.type === 'text');
-            const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
-            const nextRaw = String(currentRaw ?? '') + chunk;
-            return prev.map(m => {
-              if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
-              if (m.id === processedId && m.type === 'text') return { ...m, content: normalizeMathDelimiters(nextRaw) };
-              return m;
-            });
-          });
-          upsertActiveThread(thread => {
-            const rawMsg = thread.messages.find(m => m.id === streamId && m.type === 'text');
-            const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
-            const nextRaw = String(currentRaw ?? '') + chunk;
-            return {
-              ...thread,
-              messages: thread.messages.map(m => {
-                if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
-                if (m.id === processedId && m.type === 'text')
-                  return { ...m, content: normalizeMathDelimiters(nextRaw) };
-                return m;
-              }),
-            };
-          });
-        },
-        onDone: final => {
-          if (final && typeof final.id === 'string') lastResponseIdRef.current = final.id;
-          setThreads(prev =>
-            prev.map(t => (t.id === activeId ? { ...t, lastResponseId: lastResponseIdRef.current ?? undefined } : t)),
-          );
-          const citations = final ? extractCitationsFromOutput(final.output) : [];
-          if (citations.length > 0) {
-            const suffix =
-              '\n\n' +
-              (uiLocale === 'ru' ? 'Источники:' : 'Sources:') +
-              '\n' +
-              citations
-                .slice(0, 8)
-                .map(c => `- ${c.title ? `[${c.title}](${c.url})` : c.url}`)
-                .join('\n');
+        {
+          onDelta: chunk => {
             setMessages(prev => {
               const rawMsg = prev.find(m => m.id === streamId && m.type === 'text');
               const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
-              const nextRaw = String(currentRaw ?? '') + suffix;
+              const nextRaw = String(currentRaw ?? '') + chunk;
               return prev.map(m => {
                 if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
                 if (m.id === processedId && m.type === 'text')
@@ -1701,10 +1678,9 @@ const SidePanel = () => {
             upsertActiveThread(thread => {
               const rawMsg = thread.messages.find(m => m.id === streamId && m.type === 'text');
               const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
-              const nextRaw = String(currentRaw ?? '') + suffix;
+              const nextRaw = String(currentRaw ?? '') + chunk;
               return {
                 ...thread,
-                updatedAt: Date.now(),
                 messages: thread.messages.map(m => {
                   if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
                   if (m.id === processedId && m.type === 'text')
@@ -1713,221 +1689,276 @@ const SidePanel = () => {
                 }),
               };
             });
-          } else {
-            upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
-          }
-          // Duplicate rendered message after stream completes
-          setMessages(prev => {
-            const source = prev.find(m => m.id === streamId);
-            if (!source || !isTextMessage(source)) return prev;
-            const duplicate: ChatMessage = {
-              id: `assistant-rendered-${Date.now()}`,
-              role: 'assistant',
-              type: 'text',
-              content: source.content,
-            };
-            return [...prev, duplicate];
-          });
-          upsertActiveThread(thread => {
-            const source = thread.messages.find(m => m.id === streamId);
-            if (!source || !isTextMessage(source)) return { ...thread, updatedAt: Date.now() };
-            const duplicate: ChatMessage = {
-              id: `assistant-rendered-${Date.now() + 1}`,
-              role: 'assistant',
-              type: 'text',
-              content: source.content,
-            };
-            return { ...thread, updatedAt: Date.now(), messages: [...thread.messages, duplicate] };
-          });
-          setIsStreaming(false);
-          setStreamingMessageId(null);
-          queueMicrotask(() => inputRef.current?.focus());
-        },
-        onError: err => {
-          console.error('[CEB][SidePanel] OpenAI stream error (send)', err);
-          const status =
-            err && typeof err === 'object' && 'status' in (err as Record<string, unknown>)
-              ? Number((err as Record<string, unknown>).status)
-              : undefined;
-          // Fallback 1: retry without web_search tool on 403
-          if (status === 403 && webAccessEnabled) {
-            void streamResponsesApi(
+          },
+          onDone: final => {
+            if (final && typeof final.id === 'string') lastResponseIdRef.current = final.id;
+            setThreads(prev =>
+              prev.map(t => (t.id === activeId ? { ...t, lastResponseId: lastResponseIdRef.current ?? undefined } : t)),
+            );
+            const citations = final ? extractCitationsFromOutput(final.output) : [];
+            if (citations.length > 0) {
+              const suffix =
+                '\n\n' +
+                (uiLocale === 'ru' ? 'Источники:' : 'Sources:') +
+                '\n' +
+                citations
+                  .slice(0, 8)
+                  .map(c => `- ${c.title ? `[${c.title}](${c.url})` : c.url}`)
+                  .join('\n');
+              setMessages(prev => {
+                const rawMsg = prev.find(m => m.id === streamId && m.type === 'text');
+                const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+                const nextRaw = String(currentRaw ?? '') + suffix;
+                return prev.map(m => {
+                  if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
+                  if (m.id === processedId && m.type === 'text')
+                    return { ...m, content: normalizeMathDelimiters(nextRaw) };
+                  return m;
+                });
+              });
+              upsertActiveThread(thread => {
+                const rawMsg = thread.messages.find(m => m.id === streamId && m.type === 'text');
+                const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+                const nextRaw = String(currentRaw ?? '') + suffix;
+                return {
+                  ...thread,
+                  updatedAt: Date.now(),
+                  messages: thread.messages.map(m => {
+                    if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
+                    if (m.id === processedId && m.type === 'text')
+                      return { ...m, content: normalizeMathDelimiters(nextRaw) };
+                    return m;
+                  }),
+                };
+              });
+            } else {
+              upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
+            }
+            // Duplicate rendered message after stream completes
+            setMessages(prev => {
+              const source = prev.find(m => m.id === streamId);
+              if (!source || !isTextMessage(source)) return prev;
+              const duplicate: ChatMessage = {
+                id: `assistant-rendered-${Date.now()}`,
+                role: 'assistant',
+                type: 'text',
+                content: source.content,
+              };
+              return [...prev, duplicate];
+            });
+            upsertActiveThread(thread => {
+              const source = thread.messages.find(m => m.id === streamId);
+              if (!source || !isTextMessage(source)) return { ...thread, updatedAt: Date.now() };
+              const duplicate: ChatMessage = {
+                id: `assistant-rendered-${Date.now() + 1}`,
+                role: 'assistant',
+                type: 'text',
+                content: source.content,
+              };
+              return { ...thread, updatedAt: Date.now(), messages: [...thread.messages, duplicate] };
+            });
+            setIsStreaming(false);
+            setStreamingMessageId(null);
+            queueMicrotask(() => inputRef.current?.focus());
+          },
+          onError: err => {
+            console.error('[CEB][SidePanel] OpenAI stream error (send)', err);
+            const status =
+              err && typeof err === 'object' && 'status' in (err as Record<string, unknown>)
+                ? Number((err as Record<string, unknown>).status)
+                : undefined;
+            // Fallback 1: retry without web_search tool on 403
+            if (status === 403 && webAccessEnabled) {
               {
-                apiKey: key,
-                body: {
-                  model,
-                  input: finalInput,
-                  text: { format: { type: 'text' } },
-                  // No tools on retry
-                  ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
-                },
-              },
-              {
-                onDelta: chunk => {
-                  setMessages(prev => {
-                    const rawMsg = prev.find(m => m.id === streamId && m.type === 'text');
-                    const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
-                    const nextRaw = String(currentRaw ?? '') + chunk;
-                    return prev.map(m => {
-                      if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
-                      if (m.id === processedId && m.type === 'text')
-                        return { ...m, content: normalizeMathDelimiters(nextRaw) };
-                      return m;
-                    });
-                  });
-                  upsertActiveThread(thread => {
-                    const rawMsg = thread.messages.find(m => m.id === streamId && m.type === 'text');
-                    const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
-                    const nextRaw = String(currentRaw ?? '') + chunk;
-                    return {
-                      ...thread,
-                      messages: thread.messages.map(m => {
-                        if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
-                        if (m.id === processedId && m.type === 'text')
-                          return { ...m, content: normalizeMathDelimiters(nextRaw) };
-                        return m;
-                      }),
-                    };
-                  });
-                },
-                onDone: final => {
-                  if (final && typeof final.id === 'string') lastResponseIdRef.current = final.id;
-                  const citations = final ? extractCitationsFromOutput(final.output) : [];
-                  if (citations.length > 0) {
-                    const suffix =
-                      '\n\n' +
-                      (uiLocale === 'ru' ? 'Источники:' : 'Sources:') +
-                      '\n' +
-                      citations
-                        .slice(0, 8)
-                        .map(c => `- ${c.title ? `[${c.title}](${c.url})` : c.url}`)
-                        .join('\n');
-                    setMessages(prev => {
-                      const rawMsg = prev.find(m => m.id === streamId && m.type === 'text');
-                      const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
-                      const nextRaw = String(currentRaw ?? '') + suffix;
-                      return prev.map(m => {
-                        if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
-                        if (m.id === processedId && m.type === 'text')
-                          return { ...m, content: normalizeMathDelimiters(nextRaw) };
-                        return m;
-                      });
-                    });
-                    upsertActiveThread(thread => {
-                      const rawMsg = thread.messages.find(m => m.id === streamId && m.type === 'text');
-                      const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
-                      const nextRaw = String(currentRaw ?? '') + suffix;
-                      return {
-                        ...thread,
-                        updatedAt: Date.now(),
-                        messages: thread.messages.map(m => {
+                const ctrl = new AbortController();
+                abortRef.current = ctrl;
+                void streamResponsesApi(
+                  {
+                    apiKey: key,
+                    body: {
+                      model,
+                      input: finalInput,
+                      text: { format: { type: 'text' } },
+                      // No tools on retry
+                      ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
+                    },
+                    signal: ctrl.signal,
+                  },
+                  {
+                    onDelta: chunk => {
+                      setMessages(prev => {
+                        const rawMsg = prev.find(m => m.id === streamId && m.type === 'text');
+                        const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+                        const nextRaw = String(currentRaw ?? '') + chunk;
+                        return prev.map(m => {
                           if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
                           if (m.id === processedId && m.type === 'text')
                             return { ...m, content: normalizeMathDelimiters(nextRaw) };
                           return m;
-                        }),
-                      };
-                    });
-                  } else {
-                    upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
-                  }
-                  // Duplicate rendered message after stream completes (retry path without web_search)
-                  setMessages(prev => {
-                    const source = prev.find(m => m.id === streamId);
-                    if (!source || !isTextMessage(source)) return prev;
-                    const duplicate: ChatMessage = {
-                      id: `assistant-rendered-${Date.now()}`,
-                      role: 'assistant',
-                      type: 'text',
-                      content: source.content,
-                    };
-                    return [...prev, duplicate];
-                  });
-                  upsertActiveThread(thread => {
-                    const source = thread.messages.find(m => m.id === streamId);
-                    if (!source || !isTextMessage(source)) return { ...thread, updatedAt: Date.now() };
-                    const duplicate: ChatMessage = {
-                      id: `assistant-rendered-${Date.now() + 1}`,
-                      role: 'assistant',
-                      type: 'text',
-                      content: source.content,
-                    };
-                    return { ...thread, updatedAt: Date.now(), messages: [...thread.messages, duplicate] };
-                  });
-                  setIsStreaming(false);
-                  setStreamingMessageId(null);
-                  queueMicrotask(() => inputRef.current?.focus());
-                },
-                onError: () => {
-                  const content = uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.';
-                  setMessages(prev => prev.map(m => (m.id === streamId && m.type === 'text' ? { ...m, content } : m)));
-                  upsertActiveThread(thread => ({
-                    ...thread,
-                    updatedAt: Date.now(),
-                    messages: thread.messages.map(m =>
-                      m.id === streamId && m.type === 'text' ? { ...m, content } : m,
-                    ),
-                  }));
-                  setIsStreaming(false);
-                  queueMicrotask(() => inputRef.current?.focus());
-                },
-              },
-            );
-            return;
-          }
-          // Fallback 2: switch to gpt-4o-mini if deep model 403s
-          if (status === 403 && model === 'gpt-4o') {
-            const fallbackModel = 'gpt-4o-mini';
-            void streamResponsesApi(
+                        });
+                      });
+                      upsertActiveThread(thread => {
+                        const rawMsg = thread.messages.find(m => m.id === streamId && m.type === 'text');
+                        const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+                        const nextRaw = String(currentRaw ?? '') + chunk;
+                        return {
+                          ...thread,
+                          messages: thread.messages.map(m => {
+                            if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
+                            if (m.id === processedId && m.type === 'text')
+                              return { ...m, content: normalizeMathDelimiters(nextRaw) };
+                            return m;
+                          }),
+                        };
+                      });
+                    },
+                    onDone: final => {
+                      if (final && typeof final.id === 'string') lastResponseIdRef.current = final.id;
+                      const citations = final ? extractCitationsFromOutput(final.output) : [];
+                      if (citations.length > 0) {
+                        const suffix =
+                          '\n\n' +
+                          (uiLocale === 'ru' ? 'Источники:' : 'Sources:') +
+                          '\n' +
+                          citations
+                            .slice(0, 8)
+                            .map(c => `- ${c.title ? `[${c.title}](${c.url})` : c.url}`)
+                            .join('\n');
+                        setMessages(prev => {
+                          const rawMsg = prev.find(m => m.id === streamId && m.type === 'text');
+                          const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+                          const nextRaw = String(currentRaw ?? '') + suffix;
+                          return prev.map(m => {
+                            if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
+                            if (m.id === processedId && m.type === 'text')
+                              return { ...m, content: normalizeMathDelimiters(nextRaw) };
+                            return m;
+                          });
+                        });
+                        upsertActiveThread(thread => {
+                          const rawMsg = thread.messages.find(m => m.id === streamId && m.type === 'text');
+                          const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+                          const nextRaw = String(currentRaw ?? '') + suffix;
+                          return {
+                            ...thread,
+                            updatedAt: Date.now(),
+                            messages: thread.messages.map(m => {
+                              if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
+                              if (m.id === processedId && m.type === 'text')
+                                return { ...m, content: normalizeMathDelimiters(nextRaw) };
+                              return m;
+                            }),
+                          };
+                        });
+                      } else {
+                        upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
+                      }
+                      // Duplicate rendered message after stream completes (retry path without web_search)
+                      setMessages(prev => {
+                        const source = prev.find(m => m.id === streamId);
+                        if (!source || !isTextMessage(source)) return prev;
+                        const duplicate: ChatMessage = {
+                          id: `assistant-rendered-${Date.now()}`,
+                          role: 'assistant',
+                          type: 'text',
+                          content: source.content,
+                        };
+                        return [...prev, duplicate];
+                      });
+                      upsertActiveThread(thread => {
+                        const source = thread.messages.find(m => m.id === streamId);
+                        if (!source || !isTextMessage(source)) return { ...thread, updatedAt: Date.now() };
+                        const duplicate: ChatMessage = {
+                          id: `assistant-rendered-${Date.now() + 1}`,
+                          role: 'assistant',
+                          type: 'text',
+                          content: source.content,
+                        };
+                        return { ...thread, updatedAt: Date.now(), messages: [...thread.messages, duplicate] };
+                      });
+                      setIsStreaming(false);
+                      setStreamingMessageId(null);
+                      queueMicrotask(() => inputRef.current?.focus());
+                    },
+                    onError: () => {
+                      const content = uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.';
+                      setMessages(prev =>
+                        prev.map(m => (m.id === streamId && m.type === 'text' ? { ...m, content } : m)),
+                      );
+                      upsertActiveThread(thread => ({
+                        ...thread,
+                        updatedAt: Date.now(),
+                        messages: thread.messages.map(m =>
+                          m.id === streamId && m.type === 'text' ? { ...m, content } : m,
+                        ),
+                      }));
+                      setIsStreaming(false);
+                      queueMicrotask(() => inputRef.current?.focus());
+                    },
+                  },
+                );
+              }
+              return;
+            }
+            // Fallback 2: switch to gpt-4o-mini if deep model 403s
+            if (status === 403 && model === 'gpt-4o') {
+              const fallbackModel = 'gpt-4o-mini';
               {
-                apiKey: key,
-                body: {
-                  model: fallbackModel,
-                  input: finalInput,
-                  text: { format: { type: 'text' } },
-                  // No tools on fallback
-                  ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
-                },
-              },
-              {
-                onDelta: chunk => {
-                  setMessages(prev => {
-                    const rawMsg = prev.find(m => m.id === streamId && m.type === 'text');
-                    const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
-                    const nextRaw = String(currentRaw ?? '') + chunk;
-                    return prev.map(m => {
-                      if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
-                      if (m.id === processedId && m.type === 'text')
-                        return { ...m, content: normalizeMathDelimiters(nextRaw) };
-                      return m;
-                    });
-                  });
-                },
-                onDone: () => {
-                  setIsStreaming(false);
-                  setStreamingMessageId(null);
-                },
-                onError: () => {
-                  setIsStreaming(false);
-                  setStreamingMessageId(null);
-                },
-              },
-            );
-            return;
-          }
-          const content = uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.';
-          setMessages(prev => prev.map(m => (m.id === streamId && m.type === 'text' ? { ...m, content } : m)));
-          upsertActiveThread(thread => ({
-            ...thread,
-            updatedAt: Date.now(),
-            messages: thread.messages.map(m => (m.id === streamId && m.type === 'text' ? { ...m, content } : m)),
-          }));
-          setIsStreaming(false);
-          setStreamingMessageId(null);
-          queueMicrotask(() => inputRef.current?.focus());
+                const ctrl = new AbortController();
+                abortRef.current = ctrl;
+                void streamResponsesApi(
+                  {
+                    apiKey: key,
+                    body: {
+                      model: fallbackModel,
+                      input: finalInput,
+                      text: { format: { type: 'text' } },
+                      // No tools on fallback
+                      ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
+                    },
+                    signal: ctrl.signal,
+                  },
+                  {
+                    onDelta: chunk => {
+                      setMessages(prev => {
+                        const rawMsg = prev.find(m => m.id === streamId && m.type === 'text');
+                        const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+                        const nextRaw = String(currentRaw ?? '') + chunk;
+                        return prev.map(m => {
+                          if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
+                          if (m.id === processedId && m.type === 'text')
+                            return { ...m, content: normalizeMathDelimiters(nextRaw) };
+                          return m;
+                        });
+                      });
+                    },
+                    onDone: () => {
+                      setIsStreaming(false);
+                      setStreamingMessageId(null);
+                    },
+                    onError: () => {
+                      setIsStreaming(false);
+                      setStreamingMessageId(null);
+                    },
+                  },
+                );
+              }
+              return;
+            }
+            const content = uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.';
+            setMessages(prev => prev.map(m => (m.id === streamId && m.type === 'text' ? { ...m, content } : m)));
+            upsertActiveThread(thread => ({
+              ...thread,
+              updatedAt: Date.now(),
+              messages: thread.messages.map(m => (m.id === streamId && m.type === 'text' ? { ...m, content } : m)),
+            }));
+            setIsStreaming(false);
+            setStreamingMessageId(null);
+            queueMicrotask(() => inputRef.current?.focus());
+          },
         },
-      },
-    );
+      );
+    }
   }, [
     canSend,
     input,
@@ -1956,6 +1987,28 @@ const SidePanel = () => {
     },
     [handleSend],
   );
+
+  const clearComposer = useCallback(() => {
+    setInput('');
+    setAttachments([]);
+    if (imageInputRef.current) imageInputRef.current.value = '';
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    queueMicrotask(() => inputRef.current?.focus());
+  }, []);
+
+  const cancelStreaming = useCallback(() => {
+    try {
+      abortRef.current?.abort();
+    } catch {
+      // ignore
+    }
+    setIsStreaming(false);
+    setStreamingMessageId(null);
+    setIsComposeStreaming(false);
+    setIsReviseStreaming(false);
+    setIsGrammarStreaming(false);
+    setIsParaphraseStreaming(false);
+  }, []);
 
   const requestScreenshot = useCallback(() => {
     setScreenshotActive(true);
@@ -2156,28 +2209,33 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
 
     setWriteComposeResult('');
     setIsComposeStreaming(true);
-    void streamResponsesApi(
-      {
-        apiKey: key,
-        body: {
-          model,
-          input: [
-            { role: 'system', content: [{ type: 'input_text', text: SYSTEM_PROMPT_MARKDOWN }] },
-            { role: 'system', content: [{ type: 'input_text', text: systemPrompt }] },
-            { role: 'user', content: [{ type: 'input_text', text: base }] },
-          ],
-          text: { format: { type: 'text' } },
+    {
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
+      void streamResponsesApi(
+        {
+          apiKey: key,
+          body: {
+            model,
+            input: [
+              { role: 'system', content: [{ type: 'input_text', text: SYSTEM_PROMPT_MARKDOWN }] },
+              { role: 'system', content: [{ type: 'input_text', text: systemPrompt }] },
+              { role: 'user', content: [{ type: 'input_text', text: base }] },
+            ],
+            text: { format: { type: 'text' } },
+          },
+          signal: ctrl.signal,
         },
-      },
-      {
-        onDelta: chunk => setWriteComposeResult(prev => (prev ?? '') + chunk),
-        onDone: () => setIsComposeStreaming(false),
-        onError: () => {
-          setWriteComposeResult(uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.');
-          setIsComposeStreaming(false);
+        {
+          onDelta: chunk => setWriteComposeResult(prev => (prev ?? '') + chunk),
+          onDone: () => setIsComposeStreaming(false),
+          onError: () => {
+            setWriteComposeResult(uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.');
+            setIsComposeStreaming(false);
+          },
         },
-      },
-    );
+      );
+    }
   }, [isComposeStreaming, llmModel, uiLocale, writeComposeInput, writeFormat, writeTone, writeLength, writeLanguage]);
 
   const copyText = useCallback(async (text: string) => {
@@ -2203,28 +2261,33 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
         : `Improve style and clarity while preserving meaning. Language: ${writeLanguage}. Tone: ${writeTone}. Return only the improved text without explanations.`;
     setWriteReviseResult('');
     setIsReviseStreaming(true);
-    void streamResponsesApi(
-      {
-        apiKey: key,
-        body: {
-          model,
-          input: [
-            { role: 'system', content: [{ type: 'input_text', text: SYSTEM_PROMPT_MARKDOWN }] },
-            { role: 'user', content: [{ type: 'input_text', text: instruction }] },
-            { role: 'user', content: [{ type: 'input_text', text }] },
-          ],
-          text: { format: { type: 'text' } },
+    {
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
+      void streamResponsesApi(
+        {
+          apiKey: key,
+          body: {
+            model,
+            input: [
+              { role: 'system', content: [{ type: 'input_text', text: SYSTEM_PROMPT_MARKDOWN }] },
+              { role: 'user', content: [{ type: 'input_text', text: instruction }] },
+              { role: 'user', content: [{ type: 'input_text', text }] },
+            ],
+            text: { format: { type: 'text' } },
+          },
+          signal: ctrl.signal,
         },
-      },
-      {
-        onDelta: chunk => setWriteReviseResult(prev => (prev ?? '') + chunk),
-        onDone: () => setIsReviseStreaming(false),
-        onError: () => {
-          setWriteReviseResult(uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.');
-          setIsReviseStreaming(false);
+        {
+          onDelta: chunk => setWriteReviseResult(prev => (prev ?? '') + chunk),
+          onDone: () => setIsReviseStreaming(false),
+          onError: () => {
+            setWriteReviseResult(uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.');
+            setIsReviseStreaming(false);
+          },
         },
-      },
-    );
+      );
+    }
   }, [isReviseStreaming, llmModel, uiLocale, writeReviseInput, writeLanguage, writeTone]);
 
   const runGrammar = useCallback(async () => {
@@ -2242,28 +2305,33 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
         : 'Fix grammar and spelling. Return only the corrected text without explanations.';
     setWriteGrammarResult('');
     setIsGrammarStreaming(true);
-    void streamResponsesApi(
-      {
-        apiKey: key,
-        body: {
-          model,
-          input: [
-            { role: 'system', content: [{ type: 'input_text', text: SYSTEM_PROMPT_MARKDOWN }] },
-            { role: 'user', content: [{ type: 'input_text', text: instruction }] },
-            { role: 'user', content: [{ type: 'input_text', text }] },
-          ],
-          text: { format: { type: 'text' } },
+    {
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
+      void streamResponsesApi(
+        {
+          apiKey: key,
+          body: {
+            model,
+            input: [
+              { role: 'system', content: [{ type: 'input_text', text: SYSTEM_PROMPT_MARKDOWN }] },
+              { role: 'user', content: [{ type: 'input_text', text: instruction }] },
+              { role: 'user', content: [{ type: 'input_text', text }] },
+            ],
+            text: { format: { type: 'text' } },
+          },
+          signal: ctrl.signal,
         },
-      },
-      {
-        onDelta: chunk => setWriteGrammarResult(prev => (prev ?? '') + chunk),
-        onDone: () => setIsGrammarStreaming(false),
-        onError: () => {
-          setWriteGrammarResult(uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.');
-          setIsGrammarStreaming(false);
+        {
+          onDelta: chunk => setWriteGrammarResult(prev => (prev ?? '') + chunk),
+          onDone: () => setIsGrammarStreaming(false),
+          onError: () => {
+            setWriteGrammarResult(uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.');
+            setIsGrammarStreaming(false);
+          },
         },
-      },
-    );
+      );
+    }
   }, [isGrammarStreaming, llmModel, uiLocale, writeGrammarInput]);
 
   const runParaphrase = useCallback(async () => {
@@ -2279,28 +2347,33 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
       'Paraphrase the text while preserving meaning. Maintain the original language of the input text. Return only the paraphrased text.';
     setWriteParaphraseResult('');
     setIsParaphraseStreaming(true);
-    void streamResponsesApi(
-      {
-        apiKey: key,
-        body: {
-          model,
-          input: [
-            { role: 'system', content: [{ type: 'input_text', text: SYSTEM_PROMPT_MARKDOWN }] },
-            { role: 'user', content: [{ type: 'input_text', text: instruction }] },
-            { role: 'user', content: [{ type: 'input_text', text }] },
-          ],
-          text: { format: { type: 'text' } },
+    {
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
+      void streamResponsesApi(
+        {
+          apiKey: key,
+          body: {
+            model,
+            input: [
+              { role: 'system', content: [{ type: 'input_text', text: SYSTEM_PROMPT_MARKDOWN }] },
+              { role: 'user', content: [{ type: 'input_text', text: instruction }] },
+              { role: 'user', content: [{ type: 'input_text', text }] },
+            ],
+            text: { format: { type: 'text' } },
+          },
+          signal: ctrl.signal,
         },
-      },
-      {
-        onDelta: chunk => setWriteParaphraseResult(prev => (prev ?? '') + chunk),
-        onDone: () => setIsParaphraseStreaming(false),
-        onError: () => {
-          setWriteParaphraseResult(uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.');
-          setIsParaphraseStreaming(false);
+        {
+          onDelta: chunk => setWriteParaphraseResult(prev => (prev ?? '') + chunk),
+          onDone: () => setIsParaphraseStreaming(false),
+          onError: () => {
+            setWriteParaphraseResult(uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.');
+            setIsParaphraseStreaming(false);
+          },
         },
-      },
-    );
+      );
+    }
   }, [isParaphraseStreaming, llmModel, uiLocale, writeParaphraseInput]);
 
   const acceptDroppedFiles = useCallback((files: File[]) => {
@@ -2500,64 +2573,27 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
       const combinedTools: Array<{ type: 'web_search' }> = [];
       if (webAccessEnabled) combinedTools.push({ type: 'web_search' });
 
-      void streamResponsesApi(
-        {
-          apiKey: key,
-          body: {
-            model,
-            input: branchInput,
-            text: { format: { type: 'text' } },
-            ...(combinedTools.length > 0 ? { tools: combinedTools, tool_choice: 'auto' as const } : {}),
-            ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
+      {
+        const ctrl = new AbortController();
+        abortRef.current = ctrl;
+        void streamResponsesApi(
+          {
+            apiKey: key,
+            body: {
+              model,
+              input: branchInput,
+              text: { format: { type: 'text' } },
+              ...(combinedTools.length > 0 ? { tools: combinedTools, tool_choice: 'auto' as const } : {}),
+              ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
+            },
+            signal: ctrl.signal,
           },
-        },
-        {
-          onDelta: chunk => {
-            setMessages(prev => {
-              const rawMsg = prev.find(m => m.id === streamId && m.type === 'text');
-              const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
-              const nextRaw = String(currentRaw ?? '') + chunk;
-              return prev.map(m => {
-                if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
-                if (m.id === processedId && m.type === 'text')
-                  return { ...m, content: normalizeMathDelimiters(nextRaw) };
-                return m;
-              });
-            });
-            upsertActiveThread(thread => {
-              const rawMsg = thread.messages.find(m => m.id === streamId && m.type === 'text');
-              const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
-              const nextRaw = String(currentRaw ?? '') + chunk;
-              return {
-                ...thread,
-                messages: thread.messages.map(m => {
-                  if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
-                  if (m.id === processedId && m.type === 'text')
-                    return { ...m, content: normalizeMathDelimiters(nextRaw) };
-                  return m;
-                }),
-              };
-            });
-          },
-          onDone: final => {
-            if (final && typeof final.id === 'string') lastResponseIdRef.current = final.id;
-            setThreads(prev =>
-              prev.map(t => (t.id === activeId ? { ...t, lastResponseId: lastResponseIdRef.current ?? undefined } : t)),
-            );
-            const citations = final ? extractCitationsFromOutput(final.output) : [];
-            if (citations.length > 0) {
-              const suffix =
-                '\n\n' +
-                (uiLocale === 'ru' ? 'Источники:' : 'Sources:') +
-                '\n' +
-                citations
-                  .slice(0, 8)
-                  .map(c => `- ${c.title ? `[${c.title}](${c.url})` : c.url}`)
-                  .join('\n');
+          {
+            onDelta: chunk => {
               setMessages(prev => {
                 const rawMsg = prev.find(m => m.id === streamId && m.type === 'text');
                 const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
-                const nextRaw = String(currentRaw ?? '') + suffix;
+                const nextRaw = String(currentRaw ?? '') + chunk;
                 return prev.map(m => {
                   if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
                   if (m.id === processedId && m.type === 'text')
@@ -2568,10 +2604,9 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
               upsertActiveThread(thread => {
                 const rawMsg = thread.messages.find(m => m.id === streamId && m.type === 'text');
                 const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
-                const nextRaw = String(currentRaw ?? '') + suffix;
+                const nextRaw = String(currentRaw ?? '') + chunk;
                 return {
                   ...thread,
-                  updatedAt: Date.now(),
                   messages: thread.messages.map(m => {
                     if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
                     if (m.id === processedId && m.type === 'text')
@@ -2580,97 +2615,103 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                   }),
                 };
               });
-            } else {
-              upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
-            }
-            // Duplicate rendered message for branch
-            setMessages(prev => {
-              const source = prev.find(m => m.id === streamId);
-              if (!source || !isTextMessage(source)) return prev;
-              const duplicate: ChatMessage = {
-                id: `assistant-rendered-${Date.now()}`,
-                role: 'assistant',
-                type: 'text',
-                content: source.content,
-              };
-              return [...prev, duplicate];
-            });
-            upsertActiveThread(thread => {
-              const source = thread.messages.find(m => m.id === streamId);
-              if (!source || !isTextMessage(source)) return { ...thread, updatedAt: Date.now() };
-              const duplicate: ChatMessage = {
-                id: `assistant-rendered-${Date.now() + 1}`,
-                role: 'assistant',
-                type: 'text',
-                content: source.content,
-              };
-              return { ...thread, updatedAt: Date.now(), messages: [...thread.messages, duplicate] };
-            });
-            setIsStreaming(false);
-            setStreamingMessageId(null);
-            queueMicrotask(() => inputRef.current?.focus());
-          },
-          onError: err => {
-            console.error('[CEB][SidePanel] OpenAI stream error (branch)', err);
-            const status =
-              err && typeof err === 'object' && 'status' in (err as Record<string, unknown>)
-                ? Number((err as Record<string, unknown>).status)
-                : undefined;
-            if (status === 403 && webAccessEnabled) {
-              void streamResponsesApi(
-                {
-                  apiKey: key,
-                  body: {
-                    model,
-                    input: branchInput,
-                    text: { format: { type: 'text' } },
-                    ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
+            },
+            onDone: final => {
+              if (final && typeof final.id === 'string') lastResponseIdRef.current = final.id;
+              setThreads(prev =>
+                prev.map(t =>
+                  t.id === activeId ? { ...t, lastResponseId: lastResponseIdRef.current ?? undefined } : t,
+                ),
+              );
+              const citations = final ? extractCitationsFromOutput(final.output) : [];
+              if (citations.length > 0) {
+                const suffix =
+                  '\n\n' +
+                  (uiLocale === 'ru' ? 'Источники:' : 'Sources:') +
+                  '\n' +
+                  citations
+                    .slice(0, 8)
+                    .map(c => `- ${c.title ? `[${c.title}](${c.url})` : c.url}`)
+                    .join('\n');
+                setMessages(prev => {
+                  const rawMsg = prev.find(m => m.id === streamId && m.type === 'text');
+                  const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+                  const nextRaw = String(currentRaw ?? '') + suffix;
+                  return prev.map(m => {
+                    if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
+                    if (m.id === processedId && m.type === 'text')
+                      return { ...m, content: normalizeMathDelimiters(nextRaw) };
+                    return m;
+                  });
+                });
+                upsertActiveThread(thread => {
+                  const rawMsg = thread.messages.find(m => m.id === streamId && m.type === 'text');
+                  const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+                  const nextRaw = String(currentRaw ?? '') + suffix;
+                  return {
+                    ...thread,
+                    updatedAt: Date.now(),
+                    messages: thread.messages.map(m => {
+                      if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
+                      if (m.id === processedId && m.type === 'text')
+                        return { ...m, content: normalizeMathDelimiters(nextRaw) };
+                      return m;
+                    }),
+                  };
+                });
+              } else {
+                upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
+              }
+              // Duplicate rendered message for branch
+              setMessages(prev => {
+                const source = prev.find(m => m.id === streamId);
+                if (!source || !isTextMessage(source)) return prev;
+                const duplicate: ChatMessage = {
+                  id: `assistant-rendered-${Date.now()}`,
+                  role: 'assistant',
+                  type: 'text',
+                  content: source.content,
+                };
+                return [...prev, duplicate];
+              });
+              upsertActiveThread(thread => {
+                const source = thread.messages.find(m => m.id === streamId);
+                if (!source || !isTextMessage(source)) return { ...thread, updatedAt: Date.now() };
+                const duplicate: ChatMessage = {
+                  id: `assistant-rendered-${Date.now() + 1}`,
+                  role: 'assistant',
+                  type: 'text',
+                  content: source.content,
+                };
+                return { ...thread, updatedAt: Date.now(), messages: [...thread.messages, duplicate] };
+              });
+              setIsStreaming(false);
+              setStreamingMessageId(null);
+              queueMicrotask(() => inputRef.current?.focus());
+            },
+            onError: err => {
+              console.error('[CEB][SidePanel] OpenAI stream error (branch)', err);
+              const status =
+                err && typeof err === 'object' && 'status' in (err as Record<string, unknown>)
+                  ? Number((err as Record<string, unknown>).status)
+                  : undefined;
+              if (status === 403 && webAccessEnabled) {
+                void streamResponsesApi(
+                  {
+                    apiKey: key,
+                    body: {
+                      model,
+                      input: branchInput,
+                      text: { format: { type: 'text' } },
+                      ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
+                    },
                   },
-                },
-                {
-                  onDelta: chunk => {
-                    setMessages(prev => {
-                      const rawMsg = prev.find(m => m.id === streamId && m.type === 'text');
-                      const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
-                      const nextRaw = String(currentRaw ?? '') + chunk;
-                      return prev.map(m => {
-                        if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
-                        if (m.id === processedId && m.type === 'text')
-                          return { ...m, content: normalizeMathDelimiters(nextRaw) };
-                        return m;
-                      });
-                    });
-                    upsertActiveThread(thread => {
-                      const rawMsg = thread.messages.find(m => m.id === streamId && m.type === 'text');
-                      const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
-                      const nextRaw = String(currentRaw ?? '') + chunk;
-                      return {
-                        ...thread,
-                        messages: thread.messages.map(m => {
-                          if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
-                          if (m.id === processedId && m.type === 'text')
-                            return { ...m, content: normalizeMathDelimiters(nextRaw) };
-                          return m;
-                        }),
-                      };
-                    });
-                  },
-                  onDone: final => {
-                    if (final && typeof final.id === 'string') lastResponseIdRef.current = final.id;
-                    const citations = final ? extractCitationsFromOutput(final.output) : [];
-                    if (citations.length > 0) {
-                      const suffix =
-                        '\n\n' +
-                        (uiLocale === 'ru' ? 'Источники:' : 'Sources:') +
-                        '\n' +
-                        citations
-                          .slice(0, 8)
-                          .map(c => `- ${c.title ? `[${c.title}](${c.url})` : c.url}`)
-                          .join('\n');
+                  {
+                    onDelta: chunk => {
                       setMessages(prev => {
                         const rawMsg = prev.find(m => m.id === streamId && m.type === 'text');
                         const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
-                        const nextRaw = String(currentRaw ?? '') + suffix;
+                        const nextRaw = String(currentRaw ?? '') + chunk;
                         return prev.map(m => {
                           if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
                           if (m.id === processedId && m.type === 'text')
@@ -2681,10 +2722,9 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                       upsertActiveThread(thread => {
                         const rawMsg = thread.messages.find(m => m.id === streamId && m.type === 'text');
                         const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
-                        const nextRaw = String(currentRaw ?? '') + suffix;
+                        const nextRaw = String(currentRaw ?? '') + chunk;
                         return {
                           ...thread,
-                          updatedAt: Date.now(),
                           messages: thread.messages.map(m => {
                             if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
                             if (m.id === processedId && m.type === 'text')
@@ -2693,105 +2733,145 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                           }),
                         };
                       });
-                    } else {
-                      upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
-                    }
-                    // Duplicate rendered message for web_search retry path in branch
-                    setMessages(prev => {
-                      const source = prev.find(m => m.id === streamId);
-                      if (!source || !isTextMessage(source)) return prev;
-                      const duplicate: ChatMessage = {
-                        id: `assistant-rendered-${Date.now()}`,
-                        role: 'assistant',
-                        type: 'text',
-                        content: source.content,
-                      };
-                      return [...prev, duplicate];
-                    });
-                    upsertActiveThread(thread => {
-                      const source = thread.messages.find(m => m.id === streamId);
-                      if (!source || !isTextMessage(source)) return { ...thread, updatedAt: Date.now() };
-                      const duplicate: ChatMessage = {
-                        id: `assistant-rendered-${Date.now() + 1}`,
-                        role: 'assistant',
-                        type: 'text',
-                        content: source.content,
-                      };
-                      return { ...thread, updatedAt: Date.now(), messages: [...thread.messages, duplicate] };
-                    });
-                    setIsStreaming(false);
-                    setStreamingMessageId(null);
-                    queueMicrotask(() => inputRef.current?.focus());
-                  },
-                  onError: () => {
-                    const content = uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.';
-                    const applyErr = (m: ChatMessage) =>
-                      m.id === streamId && m.type === 'text' ? { ...m, content } : m;
-                    setMessages(prev => prev.map(applyErr));
-                    upsertActiveThread(thread => ({
-                      ...thread,
-                      updatedAt: Date.now(),
-                      messages: thread.messages.map(applyErr),
-                    }));
-                    setIsStreaming(false);
-                    queueMicrotask(() => inputRef.current?.focus());
-                  },
-                },
-              );
-              return;
-            }
-            if (status === 403 && model === 'gpt-4o') {
-              const fallbackModel = 'gpt-4o-mini';
-              void streamResponsesApi(
-                {
-                  apiKey: key,
-                  body: {
-                    model: fallbackModel,
-                    input: branchInput,
-                    text: { format: { type: 'text' } },
-                    ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
-                  },
-                },
-                {
-                  onDelta: chunk => {
-                    setMessages(prev => {
-                      const rawMsg = prev.find(m => m.id === streamId && m.type === 'text');
-                      const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
-                      const nextRaw = String(currentRaw ?? '') + chunk;
-                      return prev.map(m => {
-                        if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
-                        if (m.id === processedId && m.type === 'text')
-                          return { ...m, content: normalizeMathDelimiters(nextRaw) };
-                        return m;
+                    },
+                    onDone: final => {
+                      if (final && typeof final.id === 'string') lastResponseIdRef.current = final.id;
+                      const citations = final ? extractCitationsFromOutput(final.output) : [];
+                      if (citations.length > 0) {
+                        const suffix =
+                          '\n\n' +
+                          (uiLocale === 'ru' ? 'Источники:' : 'Sources:') +
+                          '\n' +
+                          citations
+                            .slice(0, 8)
+                            .map(c => `- ${c.title ? `[${c.title}](${c.url})` : c.url}`)
+                            .join('\n');
+                        setMessages(prev => {
+                          const rawMsg = prev.find(m => m.id === streamId && m.type === 'text');
+                          const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+                          const nextRaw = String(currentRaw ?? '') + suffix;
+                          return prev.map(m => {
+                            if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
+                            if (m.id === processedId && m.type === 'text')
+                              return { ...m, content: normalizeMathDelimiters(nextRaw) };
+                            return m;
+                          });
+                        });
+                        upsertActiveThread(thread => {
+                          const rawMsg = thread.messages.find(m => m.id === streamId && m.type === 'text');
+                          const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+                          const nextRaw = String(currentRaw ?? '') + suffix;
+                          return {
+                            ...thread,
+                            updatedAt: Date.now(),
+                            messages: thread.messages.map(m => {
+                              if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
+                              if (m.id === processedId && m.type === 'text')
+                                return { ...m, content: normalizeMathDelimiters(nextRaw) };
+                              return m;
+                            }),
+                          };
+                        });
+                      } else {
+                        upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
+                      }
+                      // Duplicate rendered message for web_search retry path in branch
+                      setMessages(prev => {
+                        const source = prev.find(m => m.id === streamId);
+                        if (!source || !isTextMessage(source)) return prev;
+                        const duplicate: ChatMessage = {
+                          id: `assistant-rendered-${Date.now()}`,
+                          role: 'assistant',
+                          type: 'text',
+                          content: source.content,
+                        };
+                        return [...prev, duplicate];
                       });
-                    });
+                      upsertActiveThread(thread => {
+                        const source = thread.messages.find(m => m.id === streamId);
+                        if (!source || !isTextMessage(source)) return { ...thread, updatedAt: Date.now() };
+                        const duplicate: ChatMessage = {
+                          id: `assistant-rendered-${Date.now() + 1}`,
+                          role: 'assistant',
+                          type: 'text',
+                          content: source.content,
+                        };
+                        return { ...thread, updatedAt: Date.now(), messages: [...thread.messages, duplicate] };
+                      });
+                      setIsStreaming(false);
+                      setStreamingMessageId(null);
+                      queueMicrotask(() => inputRef.current?.focus());
+                    },
+                    onError: () => {
+                      const content = uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.';
+                      const applyErr = (m: ChatMessage) =>
+                        m.id === streamId && m.type === 'text' ? { ...m, content } : m;
+                      setMessages(prev => prev.map(applyErr));
+                      upsertActiveThread(thread => ({
+                        ...thread,
+                        updatedAt: Date.now(),
+                        messages: thread.messages.map(applyErr),
+                      }));
+                      setIsStreaming(false);
+                      queueMicrotask(() => inputRef.current?.focus());
+                    },
                   },
-                  onDone: () => {
-                    setIsStreaming(false);
-                    setStreamingMessageId(null);
+                );
+                return;
+              }
+              if (status === 403 && model === 'gpt-4o') {
+                const fallbackModel = 'gpt-4o-mini';
+                void streamResponsesApi(
+                  {
+                    apiKey: key,
+                    body: {
+                      model: fallbackModel,
+                      input: branchInput,
+                      text: { format: { type: 'text' } },
+                      ...(lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
+                    },
                   },
-                  onError: () => {
-                    setIsStreaming(false);
-                    setStreamingMessageId(null);
+                  {
+                    onDelta: chunk => {
+                      setMessages(prev => {
+                        const rawMsg = prev.find(m => m.id === streamId && m.type === 'text');
+                        const currentRaw = rawMsg && isTextMessage(rawMsg) ? rawMsg.content : '';
+                        const nextRaw = String(currentRaw ?? '') + chunk;
+                        return prev.map(m => {
+                          if (m.id === streamId && m.type === 'text') return { ...m, content: nextRaw };
+                          if (m.id === processedId && m.type === 'text')
+                            return { ...m, content: normalizeMathDelimiters(nextRaw) };
+                          return m;
+                        });
+                      });
+                    },
+                    onDone: () => {
+                      setIsStreaming(false);
+                      setStreamingMessageId(null);
+                    },
+                    onError: () => {
+                      setIsStreaming(false);
+                      setStreamingMessageId(null);
+                    },
                   },
-                },
-              );
-              return;
-            }
-            const content = uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.';
-            const applyErr = (m: ChatMessage) => (m.id === streamId && m.type === 'text' ? { ...m, content } : m);
-            setMessages(prev => prev.map(applyErr));
-            upsertActiveThread(thread => ({
-              ...thread,
-              updatedAt: Date.now(),
-              messages: thread.messages.map(applyErr),
-            }));
-            setIsStreaming(false);
-            setStreamingMessageId(null);
-            queueMicrotask(() => inputRef.current?.focus());
+                );
+                return;
+              }
+              const content = uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.';
+              const applyErr = (m: ChatMessage) => (m.id === streamId && m.type === 'text' ? { ...m, content } : m);
+              setMessages(prev => prev.map(applyErr));
+              upsertActiveThread(thread => ({
+                ...thread,
+                updatedAt: Date.now(),
+                messages: thread.messages.map(applyErr),
+              }));
+              setIsStreaming(false);
+              setStreamingMessageId(null);
+              queueMicrotask(() => inputRef.current?.focus());
+            },
           },
-        },
-      );
+        );
+      }
     },
     [upsertActiveThread, llmModel, webAccessEnabled, buildHistoryInputItemsFrom, uiLocale, activeId],
   );
@@ -2862,73 +2942,82 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
       const regenTools: Array<{ type: 'web_search' }> = [];
       if (webAccessEnabled) regenTools.push({ type: 'web_search' });
 
-      void streamResponsesApi(
-        {
-          apiKey: key,
-          body: {
-            model,
-            input: regenInput,
-            text: { format: { type: 'text' } },
-            ...(regenTools.length > 0 ? { tools: regenTools } : {}),
-            ...(regenTools.length > 0 ? { tool_choice: 'auto' as const } : {}),
-            ...(isLatestTarget && lastResponseIdRef.current ? { previous_response_id: lastResponseIdRef.current } : {}),
+      {
+        const ctrl = new AbortController();
+        abortRef.current = ctrl;
+        void streamResponsesApi(
+          {
+            apiKey: key,
+            body: {
+              model,
+              input: regenInput,
+              text: { format: { type: 'text' } },
+              ...(regenTools.length > 0 ? { tools: regenTools } : {}),
+              ...(regenTools.length > 0 ? { tool_choice: 'auto' as const } : {}),
+              ...(isLatestTarget && lastResponseIdRef.current
+                ? { previous_response_id: lastResponseIdRef.current }
+                : {}),
+            },
+            signal: ctrl.signal,
           },
-        },
-        {
-          onDelta: chunk => {
-            setMessages(prev =>
-              prev.map(m => (m.id === id && m.type === 'text' ? { ...m, content: (m.content ?? '') + chunk } : m)),
-            );
-            upsertActiveThread(thread => ({
-              ...thread,
-              messages: thread.messages.map(m =>
-                m.id === id && m.type === 'text' ? { ...m, content: (m.content ?? '') + chunk } : m,
-              ),
-            }));
-          },
-          onDone: final => {
-            if (final && typeof final.id === 'string') lastResponseIdRef.current = final.id;
-            const citations = final ? extractCitationsFromOutput(final.output) : [];
-            if (citations.length > 0) {
-              const suffix =
-                '\n\n' +
-                (uiLocale === 'ru' ? 'Источники:' : 'Sources:') +
-                '\n' +
-                citations
-                  .slice(0, 8)
-                  .map(c => `- ${c.title ? `[${c.title}](${c.url})` : c.url}`)
-                  .join('\n');
+          {
+            onDelta: chunk => {
               setMessages(prev =>
-                prev.map(m => (m.id === id && m.type === 'text' ? { ...m, content: (m.content ?? '') + suffix } : m)),
+                prev.map(m => (m.id === id && m.type === 'text' ? { ...m, content: (m.content ?? '') + chunk } : m)),
+              );
+              upsertActiveThread(thread => ({
+                ...thread,
+                messages: thread.messages.map(m =>
+                  m.id === id && m.type === 'text' ? { ...m, content: (m.content ?? '') + chunk } : m,
+                ),
+              }));
+            },
+            onDone: final => {
+              if (final && typeof final.id === 'string') lastResponseIdRef.current = final.id;
+              const citations = final ? extractCitationsFromOutput(final.output) : [];
+              if (citations.length > 0) {
+                const suffix =
+                  '\n\n' +
+                  (uiLocale === 'ru' ? 'Источники:' : 'Sources:') +
+                  '\n' +
+                  citations
+                    .slice(0, 8)
+                    .map(c => `- ${c.title ? `[${c.title}](${c.url})` : c.url}`)
+                    .join('\n');
+                setMessages(prev =>
+                  prev.map(m => (m.id === id && m.type === 'text' ? { ...m, content: (m.content ?? '') + suffix } : m)),
+                );
+                upsertActiveThread(thread => ({
+                  ...thread,
+                  updatedAt: Date.now(),
+                  messages: thread.messages.map(m =>
+                    m.id === id && m.type === 'text' ? { ...m, content: (m.content ?? '') + suffix } : m,
+                  ),
+                }));
+              } else {
+                upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
+              }
+              setIsStreaming(false);
+              setStreamingMessageId(null);
+            },
+            onError: () => {
+              const newContent = uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.';
+              setMessages(prev =>
+                prev.map(m => (m.id === id && m.type === 'text' ? { ...m, content: newContent } : m)),
               );
               upsertActiveThread(thread => ({
                 ...thread,
                 updatedAt: Date.now(),
                 messages: thread.messages.map(m =>
-                  m.id === id && m.type === 'text' ? { ...m, content: (m.content ?? '') + suffix } : m,
+                  m.id === id && m.type === 'text' ? { ...m, content: newContent } : m,
                 ),
               }));
-            } else {
-              upsertActiveThread(thread => ({ ...thread, updatedAt: Date.now() }));
-            }
-            setIsStreaming(false);
-            setStreamingMessageId(null);
+              setIsStreaming(false);
+              setStreamingMessageId(null);
+            },
           },
-          onError: () => {
-            const newContent = uiLocale === 'ru' ? 'Ошибка запроса к OpenAI.' : 'Failed to call OpenAI.';
-            setMessages(prev => prev.map(m => (m.id === id && m.type === 'text' ? { ...m, content: newContent } : m)));
-            upsertActiveThread(thread => ({
-              ...thread,
-              updatedAt: Date.now(),
-              messages: thread.messages.map(m =>
-                m.id === id && m.type === 'text' ? { ...m, content: newContent } : m,
-              ),
-            }));
-            setIsStreaming(false);
-            setStreamingMessageId(null);
-          },
-        },
-      );
+        );
+      }
     },
     [llmModel, uiLocale, upsertActiveThread, webAccessEnabled, buildHistoryInputItemsBeforeMessage, messages],
   );
@@ -3055,7 +3144,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
         onClick={() => setMode('ask')}
         aria-pressed={mode === 'ask'}
         className={cn(
-          'group flex h-10 w-10 items-center justify-center rounded-lg ring-1 transition-colors',
+          'group flex h-10 w-10 items-center justify-center rounded-lg ring-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
           mode === 'ask'
             ? isLight
               ? 'bg-violet-600 text-white ring-violet-500'
@@ -3080,7 +3169,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
         onClick={() => setMode('read')}
         aria-pressed={mode === 'read'}
         className={cn(
-          'group mt-3 flex h-10 w-10 items-center justify-center rounded-lg ring-1 transition-colors',
+          'group mt-3 flex h-10 w-10 items-center justify-center rounded-lg ring-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
           mode === 'read'
             ? isLight
               ? 'bg-violet-600 text-white ring-violet-500'
@@ -3114,7 +3203,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
         onClick={() => setMode('write')}
         aria-pressed={mode === 'write'}
         className={cn(
-          'group mt-3 flex h-10 w-10 items-center justify-center rounded-lg ring-1 transition-colors',
+          'group mt-3 flex h-10 w-10 items-center justify-center rounded-lg ring-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
           mode === 'write'
             ? isLight
               ? 'bg-violet-600 text-white ring-violet-500'
@@ -3235,45 +3324,42 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
     <div className={cn('App', 'text-left', isLight ? 'bg-slate-50' : 'bg-gray-800')}>
       <div className={cn('relative flex h-full flex-col', isLight ? 'text-gray-900' : 'text-gray-100')}>
         {/* Header */}
-        <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-3 py-2 dark:border-slate-700">
+        <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-gradient-to-r from-white to-slate-50 px-3 py-2 shadow-sm dark:border-slate-700 dark:from-slate-800 dark:to-slate-900">
           <div className="flex items-center gap-2">
             <div className="text-base font-semibold">{headerTitle}</div>
           </div>
           <div className="relative flex items-center gap-2">
             {/* Theme toggle */}
-            <button
+            <IconButton
               onClick={exampleThemeStorage.toggle}
               title={t.toggleTheme}
-              aria-label={t.toggleTheme}
+              ariaLabel={t.toggleTheme}
               className={cn(
-                'mt-0 inline-flex h-8 w-8 items-center justify-center rounded-full border text-lg transition-colors',
+                'mt-0 text-lg',
                 isLight
                   ? 'border-slate-300 bg-white text-amber-500 hover:bg-slate-50'
                   : 'border-slate-600 bg-slate-700 text-amber-300 hover:bg-slate-600',
               )}>
               <span aria-hidden="true">{isLight ? '🌙' : '☀️'}</span>
-            </button>
+            </IconButton>
 
-            {/* Language selector */}
+            {/* Controls: compact, language */}
             <div
               className="relative"
               onBlur={e => {
                 if (!e.currentTarget.contains(e.relatedTarget as Node)) setLangOpen(false);
               }}>
-              <button
+              <IconButton
                 onClick={() => setLangOpen(v => !v)}
-                aria-haspopup="listbox"
-                aria-expanded={langOpen}
+                ariaLabel={t.langButton}
                 title={t.langButton}
-                aria-label={t.langButton}
                 className={cn(
-                  'inline-flex h-8 w-8 items-center justify-center rounded-full border text-base transition-colors',
                   isLight
                     ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
                     : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
                 )}>
                 <span aria-hidden="true">🌐</span>
-              </button>
+              </IconButton>
               {langOpen && (
                 <div
                   className={cn(
@@ -3316,7 +3402,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
               isLight ? 'bg-slate-50' : 'bg-gray-800',
             )}>
             {mode === 'ask' ? (
-              <div className="flex flex-col gap-3">
+              <div className={cn('flex flex-col', compactMode ? 'gap-2' : 'gap-3')}>
                 {messages.length === 0 && (
                   <div className="flex min-h-[60vh] flex-col items-center justify-center gap-6 py-10">
                     <div className="flex flex-col items-center gap-3">
@@ -3345,7 +3431,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                       <button
                         onClick={handleWelcomeSolve}
                         className={cn(
-                          'group flex w-full items-center justify-between gap-3 rounded-2xl p-4 ring-1 transition-colors',
+                          'group flex w-full items-center justify-between gap-3 rounded-2xl p-4 ring-1 transition-all transition-colors hover:shadow-md active:scale-[0.99]',
                           isLight
                             ? 'bg-white ring-black/10 hover:bg-slate-50'
                             : 'bg-slate-700 ring-white/10 hover:bg-slate-600',
@@ -3397,7 +3483,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                       <button
                         onClick={handleWelcomeWrite}
                         className={cn(
-                          'group flex w-full items-center justify-between gap-3 rounded-2xl p-4 ring-1 transition-colors',
+                          'group flex w-full items-center justify-between gap-3 rounded-2xl p-4 ring-1 transition-all transition-colors hover:shadow-md active:scale-[0.99]',
                           isLight
                             ? 'bg-white ring-black/10 hover:bg-slate-50'
                             : 'bg-slate-700 ring-white/10 hover:bg-slate-600',
@@ -3445,7 +3531,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                       <button
                         onClick={handleWelcomeRead}
                         className={cn(
-                          'group flex w-full items-center justify-between gap-3 rounded-2xl p-4 ring-1 transition-colors',
+                          'group flex w-full items-center justify-between gap-3 rounded-2xl p-4 ring-1 transition-all transition-colors hover:shadow-md active:scale-[0.99]',
                           isLight
                             ? 'bg-white ring-black/10 hover:bg-slate-50'
                             : 'bg-slate-700 ring-white/10 hover:bg-slate-600',
@@ -3496,7 +3582,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                       <button
                         onClick={handleWelcomeScreenshot}
                         className={cn(
-                          'group flex w-full items-center justify-between gap-3 rounded-2xl p-4 ring-1 transition-colors',
+                          'group flex w-full items-center justify-between gap-3 rounded-2xl p-4 ring-1 transition-all transition-colors hover:shadow-md active:scale-[0.99]',
                           isLight
                             ? 'bg-white ring-black/10 hover:bg-slate-50'
                             : 'bg-slate-700 ring-white/10 hover:bg-slate-600',
@@ -3554,7 +3640,8 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                           {m.type === 'text' ? (
                             <div
                               className={cn(
-                                'max-w-[90%] whitespace-pre-wrap break-words rounded-2xl px-4 py-3 text-left shadow-sm',
+                                'max-w-[90%] whitespace-pre-wrap break-words rounded-2xl text-left shadow-sm',
+                                compactMode ? 'px-3 py-2' : 'px-4 py-3',
                                 m.role === 'user'
                                   ? 'bg-violet-600 text-white'
                                   : isLight
@@ -4727,7 +4814,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
               <button
                 onClick={onNewChat}
                 className={cn(
-                  'group relative inline-flex items-center justify-center rounded-md border px-2 py-1 text-sm transition-colors',
+                  'group relative inline-flex items-center justify-center rounded-md border px-2 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
                   newChatActive
                     ? isLight
                       ? 'border-violet-500 bg-violet-100 text-violet-700'
@@ -4765,7 +4852,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
               <button
                 onClick={requestScreenshot}
                 className={cn(
-                  'group relative inline-flex items-center justify-center rounded-md border px-2 py-1 text-sm transition-colors',
+                  'group relative inline-flex items-center justify-center rounded-md border px-2 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
                   screenshotActive
                     ? isLight
                       ? 'border-violet-500 bg-violet-100 text-violet-700'
@@ -4804,7 +4891,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
               <button
                 onClick={onClickUploadImage}
                 className={cn(
-                  'group relative inline-flex items-center justify-center rounded-md border px-2 py-1 text-sm transition-colors',
+                  'group relative inline-flex items-center justify-center rounded-md border px-2 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
                   imageActive
                     ? isLight
                       ? 'border-violet-500 bg-violet-100 text-violet-700'
@@ -4843,7 +4930,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
               <button
                 onClick={onClickUploadFile}
                 className={cn(
-                  'group relative inline-flex items-center justify-center rounded-md border px-2 py-1 text-sm transition-colors',
+                  'group relative inline-flex items-center justify-center rounded-md border px-2 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
                   fileActive
                     ? isLight
                       ? 'border-violet-500 bg-violet-100 text-violet-700'
@@ -4884,14 +4971,11 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                 onBlur={e => {
                   if (!e.currentTarget.contains(e.relatedTarget as Node)) setModelPopoverOpen(false);
                 }}>
-                <button
+                <IconButton
                   onClick={() => setModelPopoverOpen(v => !v)}
                   title={t.model}
-                  aria-label={t.model}
-                  aria-haspopup="dialog"
-                  aria-expanded={modelPopoverOpen}
+                  ariaLabel={t.model}
                   className={cn(
-                    'group relative inline-flex h-8 w-8 items-center justify-center rounded-md border text-base transition-colors',
                     isLight
                       ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
                       : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
@@ -4908,15 +4992,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                     strokeLinejoin="round">
                     <path d="M12 2c-3 0-5 2-5 5v1H6a4 4 0 0 0 0 8h1v1c0 3 2 5 5 5s5-2 5-5v-1h1a4 4 0 0 0 0-8h-1V7c0-3-2-5-5-5z" />
                   </svg>
-                  <span
-                    className={cn(
-                      'pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity',
-                      isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
-                      'group-hover:opacity-100 group-focus-visible:opacity-100',
-                    )}>
-                    {t.model}
-                  </span>
-                </button>
+                </IconButton>
                 {modelPopoverOpen && (
                   <div
                     className={cn(
@@ -4962,14 +5038,11 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                 onBlur={e => {
                   if (!e.currentTarget.contains(e.relatedTarget as Node)) setWebPopoverOpen(false);
                 }}>
-                <button
+                <IconButton
                   onClick={() => setWebPopoverOpen(v => !v)}
                   title={t.webAccess}
-                  aria-label={t.webAccess}
-                  aria-haspopup="dialog"
-                  aria-expanded={webPopoverOpen}
+                  ariaLabel={t.webAccess}
                   className={cn(
-                    'group relative inline-flex h-8 w-8 items-center justify-center rounded-md border text-base transition-colors',
                     isLight
                       ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
                       : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
@@ -4988,15 +5061,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                     <path d="M12 2a10 10 0 0 1 0 20a10 10 0 0 1 0-20z" />
                     <path d="M2 12a10 5 0 0 0 20 0a10 5 0 0 0-20 0z" />
                   </svg>
-                  <span
-                    className={cn(
-                      'pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity',
-                      isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
-                      'group-hover:opacity-100 group-focus-visible:opacity-100',
-                    )}>
-                    {t.webAccess}
-                  </span>
-                </button>
+                </IconButton>
                 {webPopoverOpen && (
                   <div
                     className={cn(
@@ -5042,7 +5107,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                 title={t.history}
                 aria-label={t.history}
                 className={cn(
-                  'group relative inline-flex h-8 w-8 items-center justify-center rounded-md border text-base transition-colors',
+                  'group relative inline-flex h-8 w-8 items-center justify-center rounded-md border text-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
                   isLight
                     ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
                     : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
@@ -5146,46 +5211,71 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={onKeyDown}
                 onPaste={onComposerPaste}
-                rows={2}
+                rows={compactMode ? 1 : 2}
                 placeholder={t.placeholder}
                 className={cn(
-                  'max-h-40 min-h-[64px] w-full resize-none rounded-md border px-3 py-2 pr-12 text-sm outline-none',
+                  'w-full resize-none rounded-md border px-3 py-2 pr-12 text-sm outline-none',
+                  compactMode ? 'max-h-32 min-h-[48px]' : 'max-h-40 min-h-[64px]',
                   isLight
                     ? 'border-slate-300 bg-white text-gray-900 focus:border-violet-500 focus:ring-1 focus:ring-violet-500'
                     : 'border-slate-600 bg-slate-700 text-gray-100 focus:border-violet-400 focus:ring-1 focus:ring-violet-400',
                 )}
               />
               <button
-                onClick={handleSend}
-                disabled={!canSend || isStreaming}
+                onClick={clearComposer}
+                disabled={input.trim().length === 0 && attachments.length === 0}
                 className={cn(
-                  'group absolute bottom-2 right-2 inline-flex h-8 w-8 items-center justify-center rounded-md text-sm shadow-sm transition-colors',
-                  canSend && !isStreaming
-                    ? 'bg-violet-600 text-white hover:bg-violet-700'
+                  'group absolute bottom-2 right-12 inline-flex h-8 w-8 items-center justify-center rounded-md text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
+                  input.trim().length > 0 || attachments.length > 0
+                    ? isLight
+                      ? 'bg-slate-200 text-gray-700 hover:bg-slate-300'
+                      : 'bg-slate-600 text-gray-100 hover:bg-slate-500'
                     : 'bg-gray-400 text-white opacity-60',
                 )}
-                title={t.send}
-                aria-label={t.send}>
-                <svg
-                  aria-hidden="true"
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round">
-                  <path d="M22 2L11 13" />
-                  <path d="M22 2l-7 20-4-9-9-4 20-7z" />
-                </svg>
+                title={t.clear}
+                aria-label={t.clear}>
+                ✕
+              </button>
+              <button
+                onClick={isStreaming ? cancelStreaming : handleSend}
+                disabled={!canSend && !isStreaming}
+                className={cn(
+                  'group absolute bottom-2 right-2 inline-flex h-8 w-8 items-center justify-center rounded-md text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
+                  isStreaming
+                    ? 'bg-slate-500 text-white hover:bg-red-600'
+                    : canSend
+                      ? 'bg-violet-600 text-white hover:bg-violet-700'
+                      : 'bg-gray-400 text-white opacity-60',
+                )}
+                title={isStreaming ? t.cancel : t.send}
+                aria-label={isStreaming ? t.cancel : t.send}>
+                {isStreaming ? (
+                  <span
+                    aria-hidden="true"
+                    className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/90 border-t-transparent"
+                  />
+                ) : (
+                  <svg
+                    aria-hidden="true"
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round">
+                    <path d="M22 2L11 13" />
+                    <path d="M22 2l-7 20-4-9-9-4 20-7z" />
+                  </svg>
+                )}
                 <span
                   className={cn(
                     'pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity',
                     isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
                     'group-hover:opacity-100 group-focus-visible:opacity-100',
                   )}>
-                  {t.send}
+                  {isStreaming ? t.cancel : t.send}
                 </span>
               </button>
             </div>
