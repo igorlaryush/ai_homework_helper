@@ -134,13 +134,19 @@ chrome.runtime.onMessage.addListener((message, sender) => {
       // Some pages are restricted and do not allow content scripts
       const isRestrictedUrl =
         tabUrl.startsWith('chrome://') ||
+        tabUrl.startsWith('chrome-search://') ||
         tabUrl.startsWith('edge://') ||
+        tabUrl.startsWith('brave://') ||
+        tabUrl.startsWith('vivaldi://') ||
+        tabUrl.startsWith('opera://') ||
         tabUrl.startsWith('about:') ||
         tabUrl.startsWith('chrome-extension://') ||
         /^https?:\/\/chrome\.google\.com\//.test(tabUrl);
       if (isRestrictedUrl) {
         console.warn(`${LOG_PREFIX} cannot inject content script on restricted URL`, { tabUrl });
-        chrome.runtime.sendMessage({ type: 'SCREENSHOT_CANCELLED' }).catch(() => undefined);
+        chrome.runtime
+          .sendMessage({ type: 'SCREENSHOT_NOT_ALLOWED', reason: 'restricted', url: tabUrl })
+          .catch(() => undefined);
         return;
       }
 
@@ -155,7 +161,9 @@ chrome.runtime.onMessage.addListener((message, sender) => {
                   const injectError = chrome.runtime.lastError;
                   if (injectError) {
                     console.error(`${LOG_PREFIX} executeScript failed`, injectError);
-                    chrome.runtime.sendMessage({ type: 'SCREENSHOT_CANCELLED' }).catch(() => undefined);
+                    chrome.runtime
+                      .sendMessage({ type: 'SCREENSHOT_NOT_ALLOWED', reason: 'inject_failed', url: tabUrl })
+                      .catch(() => undefined);
                     return;
                   }
                   // Retry shortly after successful injection to ensure listeners are ready
@@ -164,7 +172,9 @@ chrome.runtime.onMessage.addListener((message, sender) => {
                       const retryError = chrome.runtime.lastError;
                       if (retryError) {
                         console.error(`${LOG_PREFIX} Retry BEGIN_SELECTION failed`, retryError);
-                        chrome.runtime.sendMessage({ type: 'SCREENSHOT_CANCELLED' }).catch(() => undefined);
+                        chrome.runtime
+                          .sendMessage({ type: 'SCREENSHOT_NOT_ALLOWED', reason: 'retry_failed', url: tabId })
+                          .catch(() => undefined);
                       } else {
                         console.debug(`${LOG_PREFIX} BEGIN_SELECTION delivered after injection`, { tabId });
                       }
@@ -173,7 +183,9 @@ chrome.runtime.onMessage.addListener((message, sender) => {
                 });
               } catch (e) {
                 console.error(`${LOG_PREFIX} executeScript threw`, e);
-                chrome.runtime.sendMessage({ type: 'SCREENSHOT_CANCELLED' }).catch(() => undefined);
+                chrome.runtime
+                  .sendMessage({ type: 'SCREENSHOT_NOT_ALLOWED', reason: 'execute_threw', url: tabId })
+                  .catch(() => undefined);
               }
             } else {
               console.debug(`${LOG_PREFIX} BEGIN_SELECTION delivered`, { tabId });

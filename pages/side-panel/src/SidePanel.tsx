@@ -91,6 +91,8 @@ const UI_I18N = {
     uiOnly: 'UI only',
     toggleTheme: 'Toggle theme',
     screenshot: 'Screenshot',
+    screenshot_not_allowed:
+      'Due to browser technical restrictions, screenshots are not available on this page. Please take screenshots on regular websites.',
     welcome_title: 'How can I assist you today?',
     welcome_solve_title: 'Solve study problem',
     welcome_solve_sub: 'Help me solve this math question and provide detailed steps',
@@ -188,6 +190,8 @@ const UI_I18N = {
     uiOnly: 'Только UI',
     toggleTheme: 'Сменить тему',
     screenshot: 'Скриншот',
+    screenshot_not_allowed:
+      'Из-за технических ограничений браузера на этой странице нельзя делать скриншоты. Пожалуйста, делайте скриншоты на обычных сайтах.',
     welcome_title: 'Чем я могу помочь сегодня?',
     welcome_solve_title: 'Решить учебную задачу',
     welcome_solve_sub: 'Помоги решить задачу по математике и распиши подробные шаги',
@@ -285,6 +289,8 @@ const UI_I18N = {
     uiOnly: 'Лише UI',
     toggleTheme: 'Перемкнути тему',
     screenshot: 'Скріншот',
+    screenshot_not_allowed:
+      'Через технічні обмеження браузера на цій сторінці не можна робити скріншоти. Будь ласка, робіть скріншоти на звичайних сайтах.',
     uploadImage: 'Завантажити зображення',
     uploadFile: 'Завантажити PDF',
     newChat: 'Новий чат',
@@ -373,6 +379,8 @@ const UI_I18N = {
     uiOnly: 'Nur UI',
     toggleTheme: 'Theme umschalten',
     screenshot: 'Screenshot',
+    screenshot_not_allowed:
+      'Aufgrund technischer Browser-Beschränkungen sind auf dieser Seite keine Screenshots möglich. Bitte machen Sie Screenshots auf normalen Websites.',
     uploadImage: 'Bild hochladen',
     uploadFile: 'PDF hochladen',
     newChat: 'Neuer Chat',
@@ -461,6 +469,8 @@ const UI_I18N = {
     uiOnly: 'Interface uniquement',
     toggleTheme: 'Changer le thème',
     screenshot: "Capture d'écran",
+    screenshot_not_allowed:
+      'En raison de restrictions techniques du navigateur, les captures d’écran ne sont pas disponibles sur cette page. Veuillez effectuer des captures sur des sites classiques.',
     uploadImage: 'Téléverser une image',
     uploadFile: 'Téléverser un PDF',
     newChat: 'Nouvelle conversation',
@@ -549,6 +559,8 @@ const UI_I18N = {
     uiOnly: 'Solo IU',
     toggleTheme: 'Cambiar tema',
     screenshot: 'Captura de pantalla',
+    screenshot_not_allowed:
+      'Debido a restricciones técnicas del navegador, no se pueden hacer capturas en esta página. Por favor, realiza capturas en sitios web normales.',
     uploadImage: 'Subir imagen',
     uploadFile: 'Subir PDF',
     newChat: 'Nuevo chat',
@@ -637,6 +649,8 @@ const UI_I18N = {
     uiOnly: 'Somente UI',
     toggleTheme: 'Alternar tema',
     screenshot: 'Captura de tela',
+    screenshot_not_allowed:
+      'Devido a restrições técnicas do navegador, não é possível fazer capturas nesta página. Faça capturas em sites comuns.',
     uploadImage: 'Enviar imagem',
     uploadFile: 'Enviar PDF',
     newChat: 'Novo chat',
@@ -725,6 +739,8 @@ const UI_I18N = {
     uiOnly: 'Yalnızca arayüz',
     toggleTheme: 'Temayı değiştir',
     screenshot: 'Ekran görüntüsü',
+    screenshot_not_allowed:
+      'Tarayıcıdaki teknik kısıtlamalar nedeniyle bu sayfada ekran görüntüsü alınamaz. Lütfen normal sitelerde ekran görüntüsü alın.',
     uploadImage: 'Görüntü yükle',
     uploadFile: 'PDF yükle',
     newChat: 'Yeni sohbet',
@@ -813,6 +829,7 @@ const UI_I18N = {
     uiOnly: '仅界面',
     toggleTheme: '切换主题',
     screenshot: '屏幕截图',
+    screenshot_not_allowed: '由于浏览器的技术限制，此页面无法进行截图。请在普通网站上进行截图。',
     uploadImage: '上传图片',
     uploadFile: '上传 PDF',
     newChat: '新建聊天',
@@ -1297,6 +1314,8 @@ const SidePanel = () => {
   }, []);
   const [readDragging, setReadDragging] = useState<boolean>(false);
   const [readActiveId, setReadActiveId] = useState<string | null>(null);
+  const [screenshotError, setScreenshotError] = useState<string>('');
+  const [screenshotOverlayStarted, setScreenshotOverlayStarted] = useState<boolean>(false);
 
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
@@ -2011,6 +2030,8 @@ const SidePanel = () => {
   }, []);
 
   const requestScreenshot = useCallback(() => {
+    setScreenshotError('');
+    setScreenshotOverlayStarted(false);
     setScreenshotActive(true);
     chrome.runtime.sendMessage({ type: 'SCREENSHOT_REQUEST' }).catch(() => setScreenshotActive(false));
   }, []);
@@ -2154,7 +2175,7 @@ const SidePanel = () => {
         // ignore failures to auto-attach; user can still chat manually
       }
     },
-    [threads, t.read_chat_prompt, handleSend],
+    [threads, t.read_chat_prompt],
   );
 
   const deletePdf = useCallback(
@@ -2466,7 +2487,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
     window.setTimeout(() => setNewChatActive(false), 300);
   }, [createNewChat]);
 
-  // Handle screenshot results
+  // Handle screenshot results and errors
   useEffect(() => {
     const onMessage = async (message: unknown) => {
       const msg = message as {
@@ -2474,6 +2495,11 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
         dataUrl?: string;
         bounds?: { x: number; y: number; width: number; height: number; dpr: number };
       };
+      if (msg?.type === 'SCREENSHOT_OVERLAY_STARTED') {
+        setScreenshotOverlayStarted(true);
+        setScreenshotError('');
+        return;
+      }
       if (msg?.type === 'SCREENSHOT_CAPTURED' && msg.dataUrl && msg.bounds) {
         try {
           const cropped = await cropImageDataUrl(msg.dataUrl, msg.bounds);
@@ -2481,14 +2507,26 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
         } catch {
           // ignore
         } finally {
+          setScreenshotError('');
           setScreenshotActive(false);
+          setScreenshotOverlayStarted(false);
         }
       }
-      if (msg?.type === 'SCREENSHOT_CANCELLED') setScreenshotActive(false);
+      if (msg?.type === 'SCREENSHOT_CANCELLED') {
+        setScreenshotActive(false);
+        setScreenshotOverlayStarted(false);
+      }
+      if (msg?.type === 'SCREENSHOT_NOT_ALLOWED') {
+        setScreenshotActive(false);
+        if (!screenshotOverlayStarted) {
+          setScreenshotError(t.screenshot_not_allowed);
+          window.setTimeout(() => setScreenshotError(''), 6000);
+        }
+      }
     };
     chrome.runtime.onMessage.addListener(onMessage);
     return () => chrome.runtime.onMessage.removeListener(onMessage);
-  }, []);
+  }, [t, screenshotOverlayStarted]);
 
   const removeAttachment = useCallback((id: string) => {
     setAttachments(prev => prev.filter(a => a.id !== id));
@@ -4806,6 +4844,41 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
           {/* External right sidebar takes full height */}
           <RightToolbar />
         </div>
+
+        {/* Inline notice about screenshot restrictions */}
+        {screenshotError && (
+          <div
+            role="alert"
+            aria-live="polite"
+            className={cn(
+              'mx-3 my-2 flex items-start justify-between gap-3 rounded-md border px-3 py-2 text-sm transition-colors',
+              isLight
+                ? 'border-red-200 bg-red-50 text-red-800 hover:bg-red-100'
+                : 'border-red-700 bg-red-900/40 text-red-200 hover:bg-red-900/60',
+            )}>
+            <button
+              type="button"
+              onClick={() => setScreenshotError('')}
+              className={cn(
+                'flex-1 rounded bg-transparent text-left outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
+                isLight ? 'focus-visible:ring-red-300' : 'focus-visible:ring-red-800',
+              )}
+              title={t.cancel}
+              aria-label={t.cancel}>
+              {screenshotError}
+            </button>
+            <button
+              onClick={e => {
+                e.stopPropagation();
+                setScreenshotError('');
+              }}
+              className={cn('rounded px-1 text-xs', isLight ? 'hover:bg-red-200/60' : 'hover:bg-red-800/50')}
+              title={t.cancel}
+              aria-label={t.cancel}>
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Tools row: show only in Ask mode */}
         {mode === 'ask' && (

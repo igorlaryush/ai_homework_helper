@@ -109,6 +109,11 @@ export default function App() {
         setSelecting(true);
         setSelectionStart(null);
         setSelectionRect(null);
+        try {
+          chrome.runtime.sendMessage({ type: 'SCREENSHOT_OVERLAY_STARTED' });
+        } catch {
+          // ignore
+        }
       }
     };
     chrome.runtime.onMessage.addListener(onMessage);
