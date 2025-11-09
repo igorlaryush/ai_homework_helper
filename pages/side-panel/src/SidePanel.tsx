@@ -957,10 +957,46 @@ type ReadFileItem = {
 const MAX_TEXTAREA_PX = 160; // Tailwind max-h-40
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
 
-const SYSTEM_PROMPT_MARKDOWN =
-  'You are a helpful AI studing assistant. All of your responses must be formatted using Markdown.';
+// Map UI locale to human-readable language name for clearer system instructions
+const uiLocaleToLanguageName = (locale: string): string => {
+  switch (locale) {
+    case 'ru':
+      return 'Russian';
+    case 'uk':
+      return 'Ukrainian';
+    case 'de':
+      return 'German';
+    case 'fr':
+      return 'French';
+    case 'es':
+      return 'Spanish';
+    case 'pt':
+      return 'Portuguese';
+    case 'tr':
+      return 'Turkish';
+    case 'zh':
+      return 'Chinese';
+    case 'en':
+    default:
+      return 'English';
+  }
+};
 
-const ASK_AI_SYSTEM_PROMPT = `You are an AI Homework Helper. Your goal is to help students understand their assignments, not just to give them answers.
+// Build a general-purpose system prompt enforcing Markdown, UI language, and image handling
+const buildSystemPromptMarkdown = (uiLocale: string): string => {
+  const languageName = uiLocaleToLanguageName(uiLocale);
+  return [
+    'You are a helpful AI studying assistant.',
+    'All of your responses must be formatted using Markdown.',
+    `Default to responding in ${languageName}. If the user explicitly requests another language or later instructions specify one, follow that.`,
+    'If the user provides images (e.g., screenshots), analyze them. If they contain questions or tasks, answer or solve them directly using the image content; otherwise briefly describe what is shown and ask clarifying questions if needed.',
+    'If a task allows a short, direct answer (e.g., a number, date, or single term), first give the short answer clearly; then, on a new line, provide a concise, step-by-step explanation. If the instructions explicitly say to return only the result (e.g., “return only the corrected text”), do not add explanations.',
+  ].join(' ');
+};
+
+const buildAskAiSystemPrompt = (uiLocale: string): string => {
+  const languageName = uiLocaleToLanguageName(uiLocale);
+  return `You are an AI Homework Helper. Your goal is to help students understand their assignments, not just to give them answers.
 
 [CRITICAL RULE]
 
@@ -970,7 +1006,14 @@ When a user asks a question, first determine if it can have a short, direct answ
 
 - If NO (the question requires a detailed explanation): Provide the detailed explanation directly.
 
-Always be encouraging and clear in your explanations.`;
+Always be encouraging and clear in your explanations.
+
+[LANGUAGE]
+Always respond in ${languageName} by default. If the user explicitly requests another language, follow their preference.
+
+[IMAGES]
+If the user includes any images (e.g., screenshots), first identify whether they contain questions or tasks. If they do, answer those questions or complete the task directly using the content of the image. If not, briefly describe the image and ask a clarifying question.`;
+};
 
 // Minimal types for OpenAI Responses API parsing
 type ResponseAnnotation = { url?: string; title?: string };
@@ -1520,7 +1563,11 @@ const SidePanel = () => {
         const isImageMessage = (m: ChatMessage): m is Extract<ChatMessage, { type: 'image' }> => m.type === 'image';
         const textItem = [...group].reverse().find(isTextMessage);
         const images = group.filter(isImageMessage);
-        const text = textItem?.content || (uiLocale === 'ru' ? 'Опиши вложения.' : 'Describe the attachments.');
+        const text =
+          textItem?.content ||
+          (uiLocale === 'ru'
+            ? 'Если во вложенных изображениях (скриншотах) есть вопрос или задание — ответь или реши его. Иначе кратко опиши вложения.'
+            : 'If the attachments (screenshots) contain a question or task, answer or solve it; otherwise briefly describe the attachments.');
         const imageParts = images.map(img => ({ type: 'input_image', image_url: img.dataUrl }));
         items.push({ role: 'user', content: [{ type: 'input_text', text }, ...imageParts] });
         i = start - 1;
@@ -1653,7 +1700,7 @@ const SidePanel = () => {
         : inputPayload;
 
     const finalInput = [
-      { role: 'system', content: [{ type: 'input_text', text: ASK_AI_SYSTEM_PROMPT }] },
+      { role: 'system', content: [{ type: 'input_text', text: buildAskAiSystemPrompt(uiLocale) }] },
       ...inputWithFiles,
     ];
 
@@ -2239,7 +2286,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
           body: {
             model,
             input: [
-              { role: 'system', content: [{ type: 'input_text', text: SYSTEM_PROMPT_MARKDOWN }] },
+              { role: 'system', content: [{ type: 'input_text', text: buildSystemPromptMarkdown(uiLocale) }] },
               { role: 'system', content: [{ type: 'input_text', text: systemPrompt }] },
               { role: 'user', content: [{ type: 'input_text', text: base }] },
             ],
@@ -2291,7 +2338,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
           body: {
             model,
             input: [
-              { role: 'system', content: [{ type: 'input_text', text: SYSTEM_PROMPT_MARKDOWN }] },
+              { role: 'system', content: [{ type: 'input_text', text: buildSystemPromptMarkdown(uiLocale) }] },
               { role: 'user', content: [{ type: 'input_text', text: instruction }] },
               { role: 'user', content: [{ type: 'input_text', text }] },
             ],
@@ -2335,7 +2382,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
           body: {
             model,
             input: [
-              { role: 'system', content: [{ type: 'input_text', text: SYSTEM_PROMPT_MARKDOWN }] },
+              { role: 'system', content: [{ type: 'input_text', text: buildSystemPromptMarkdown(uiLocale) }] },
               { role: 'user', content: [{ type: 'input_text', text: instruction }] },
               { role: 'user', content: [{ type: 'input_text', text }] },
             ],
@@ -2377,7 +2424,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
           body: {
             model,
             input: [
-              { role: 'system', content: [{ type: 'input_text', text: SYSTEM_PROMPT_MARKDOWN }] },
+              { role: 'system', content: [{ type: 'input_text', text: buildSystemPromptMarkdown(uiLocale) }] },
               { role: 'user', content: [{ type: 'input_text', text: instruction }] },
               { role: 'user', content: [{ type: 'input_text', text }] },
             ],
@@ -2581,7 +2628,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
       const model = llmModel === 'deep' ? 'gpt-4o' : 'gpt-4o-mini';
       const inputPayload = buildHistoryInputItemsFrom(kept, 5);
       const branchInput = [
-        { role: 'system', content: [{ type: 'input_text', text: ASK_AI_SYSTEM_PROMPT }] },
+        { role: 'system', content: [{ type: 'input_text', text: buildAskAiSystemPrompt(uiLocale) }] },
         ...inputPayload,
       ];
 
@@ -2959,11 +3006,11 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
 
       const regenInput: Array<Record<string, unknown>> = Array.isArray(inputPayload)
         ? [
-            { role: 'system', content: [{ type: 'input_text', text: ASK_AI_SYSTEM_PROMPT }] },
+            { role: 'system', content: [{ type: 'input_text', text: buildAskAiSystemPrompt(uiLocale) }] },
             ...((inputPayload as Array<Record<string, unknown>>) || []),
           ]
         : [
-            { role: 'system', content: [{ type: 'input_text', text: ASK_AI_SYSTEM_PROMPT }] },
+            { role: 'system', content: [{ type: 'input_text', text: buildAskAiSystemPrompt(uiLocale) }] },
             { role: 'user', content: [{ type: 'input_text', text: String(inputPayload) }] },
           ];
 
