@@ -1,30 +1,20 @@
 {
-  "extensionDescription": {
-    "description": "Extension description",
-    "message": "Chrome extension boilerplate developed with Vite, React and Typescript"
-  },
-  "extensionName": {
-    "description": "Extension name",
+  "appName": {
     "message": "AI Homework Helper"
   },
-  "toggleTheme": {
-    "message": "Toggle theme"
+  "shortDesc": {
+    "message": "The smart ai homework helper for students. A reliable ai math solver and a tool to ask ai any academic question."
+  },
+  "storeDesc": {
+    "message": "🎓 Your Ultimate Academic Partner\n\nFeeling overwhelmed by complex assignments and endless homework? Meet your new essential tool: the Ai homework helper. This powerful Chrome extension is engineered to provide insightful and clear assistance, transforming your study sessions into productive and enlightening experiences. It's designed to be more than just an answer-finder; it's a learning tool that helps you understand the how and why behind every solution. Move past academic hurdles with a smart companion designed for modern learning.\n\n🚀 How to Get Started\n\nInstall the extension with a single click.\n\nNavigate to your assignment or question.\n\nActivate the tool to receive instant guidance.\n\nUnderstand concepts with detailed, step-by-step explanations.\n\nOur tool is designed to provide seamless math homework help and support across all subjects. The smart helper integrates directly into your browser, ready to assist whenever you need it.\n\n🌟 Key Features to Elevate Your Learning\n💠 Instant Assistance: Get immediate support for a wide range of subjects. Our homework help ai is always ready to provide clarity when you're stuck.\n💠 In-Depth Explanations: We focus on helping you learn the material, not just giving you the final ai answer. Each step is broken down for better comprehension.\n💠 User-Friendly Interface: A clean and simple design means you can focus on your studies without distractions or a steep learning curve.\n\n📸 Visual Problem Solving\nGot a complex problem in a textbook or on a worksheet? The math picture solver feature is a game-changer. Just snap a photo of the question, and our smart technology will analyze and guide you through the solution. This is perfect for visual learners and complex diagrams, especially when you need to solve math problems.\n\n🧠 Your Dedicated Math Assistant\nMathematics can be challenging, but our extension excels as a true math solver.\n➤ Functions as an advanced algebra calculator.\n➤ Acts as a reliable math problem solver for various topics.\n➤ Our math ai engine provides comprehensive math help.\n➤ Includes a versatile math calculator for your convenience.\n\nOur ai math solver is more than just a calculator; it's a tool to help you understand mathematical concepts deeply. This is the ai helper homework tool you need to conquer quantitative subjects.\n\n💬 Interactive Learning Experience\nEngage with your studies like never before. Our ai chat to help with homework allows you to ask ai follow-up questions for a truly conversational experience.\n1️⃣ Clarify doubts instantly.\n2️⃣ Explore topics in greater detail.\n3️⃣ Get personalized guidance from our question ai.\n4️⃣ Make learning an active, engaging process.\n5️⃣ Our question ai homework helper is like having a tutor on demand.\n\nThis homework ai feature ensures you're not just getting answers, but truly comprehending the material. This homework helper is built for curious minds.\n\n🌍 For Every Kind of Learner\nOur tool is designed to support a wide range of academic needs.\n• High School Students: Get clear explanations for core subjects and prepare for exams with confidence.\n• College & University Students: Tackle complex research, understand dense academic papers, and get assistance with higher-level coursework.\n• Lifelong Learners: Explore new topics and hobbies with a knowledgeable companion to guide you.\n\nOur mission is to provide effective algorithms to help with homework, making education more accessible and less stressful for everyone.\n\n❓ Frequently Asked Questions:\n📌 How does the extension work?\n💡 Our tool uses sophisticated algorithms to analyze your questions and provide detailed, step-by-step guidance. It's an advanced homework helper ai system designed for deep learning.\n\n📌 Is it suitable for my specific grade level?\n💡 Absolutely. Our extension is designed to assist students across various educational stages, from middle school to university.\n\n📌 How accurate is the guidance?\n💡 Our Ai homework helper is powered by constantly updated large language models to ensure high accuracy. It excels at providing reliable guidance so you can trust the learning process.\n\n📌 Is my privacy protected?\n💡 Yes. The extension operates with your privacy in mind. We do not require unnecessary permissions or access to your personal data to provide quality assistance.\n\n📌 How is this different from a standard search engine?\n💡 Unlike a search engine that gives you links, our tool provides a direct, structured ai answer. The question ai functionality allows for interactive follow-up that a search engine cannot provide. It’s a focused homework helper for academic tasks.\n\nTake control of your homework and enhance your learning. Download the extension today and unlock your full academic potential. This is the homework ai tool that will redefine your study habits. Join thousands of students who are already studying smarter, not harder. Get the homework help you need to succeed. 🎉\n"
   },
   "injectButton": {
     "message": "Click to inject Content Scripts"
   },
-  "greeting": {
-    "description": "Greeting message",
-    "message": "Hello, My name is $NAME$",
-    "placeholders": {
-      "name": {
-        "content": "$1",
-        "example": "John Doe"
-      }
-    }
+  "toggleTheme": {
+    "message": "Toggle theme"
   },
   "hello": {
-    "description": "Placeholder example",
     "message": "Hello $1"
   },
   "displayErrorInfo": {
