@@ -20,7 +20,6 @@ const packageJson = JSON.parse(readFileSync('./package.json', 'utf8'));
  */
 const manifest = {
   manifest_version: 3,
-  key: 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAz+W67Np0dAeQ8b6T8Y11MhfiZcvYUAlypEP5Kv9ocPl62hcejhVtKxSY+Ix6osYcReFv0oIYekVHADAXBVw7CrgddTTcAxSWPt0nn/DWqqHZGHzXswDgG7mJqK35mWpfJExYWB8xMN5kU2pSKFvcN+XPer9Hd1PaOhBcL9cl47tpNvJrA53/5hkC1tUtTV56fqfQW2dyhh+U1G5yH+wWDXOMkfSiN3jQfST5+va89tMnhj9Obx0+0MjPNXhndxbWJkoET58lQGay8j66DlJIIQg7ybEPTifZkc0zHEIwov1ntNotAggV+PRIgF/FRgbI/l3qkQ0iJ6gS3cyTAo6MzQIDAQAB',
   default_locale: 'en',
   name: '__MSG_appName__',
   browser_specific_settings: {
