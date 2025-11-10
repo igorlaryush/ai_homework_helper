@@ -184,6 +184,8 @@ const UI_I18N = {
     chip_short: 'Short',
     chip_medium: 'Medium',
     chip_long: 'Long',
+    contact_feature_idea: 'Got feature ideas or feedback?',
+    contact_email_cta: 'Email me:',
   },
   ru: {
     title: 'LLM Чат',
@@ -283,6 +285,8 @@ const UI_I18N = {
     chip_short: 'Короткий',
     chip_medium: 'Средний',
     chip_long: 'Длинный',
+    contact_feature_idea: 'Есть идеи по новым функциям или предложения?',
+    contact_email_cta: 'Пишите на почту:',
   },
   uk: {
     title: 'LLM Чат',
@@ -3340,6 +3344,21 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
               'h-full min-h-0 flex-1 overflow-y-auto overscroll-none px-3 py-3',
               isLight ? 'bg-slate-50' : 'bg-gray-800',
             )}>
+            <div
+              role="note"
+              className={cn(
+                'mb-3 rounded-md border px-3 py-2 text-sm',
+                isLight
+                  ? 'border-amber-200 bg-amber-50 text-amber-800'
+                  : 'border-amber-700 bg-amber-900/30 text-amber-200',
+              )}>
+              {t.contact_feature_idea ?? 'Got feature ideas or feedback?'} {t.contact_email_cta ?? 'Email me:'}{' '}
+              <a
+                href="mailto:laryushin.extension@gmail.com"
+                className={cn('underline underline-offset-2', isLight ? 'text-amber-900' : 'text-amber-200')}>
+                laryushin.extension@gmail.com
+              </a>
+            </div>
             {mode === 'ask' ? (
               <div className={cn('flex flex-col', compactMode ? 'gap-2' : 'gap-3')}>
                 {messages.length === 0 && (
