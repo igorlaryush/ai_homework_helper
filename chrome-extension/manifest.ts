@@ -30,11 +30,8 @@ const manifest = {
   },
   version: packageJson.version,
   description: '__MSG_shortDesc__',
-  externally_connectable: {
-    matches: ['https://onlineapp.pro/*', 'https://onlineapp.stream/*', 'https://onlineapp.live/*'],
-  },
-  host_permissions: ['<all_urls>'],
-  permissions: ['storage', 'unlimitedStorage', 'scripting', 'tabs', 'notifications', 'sidePanel'],
+  host_permissions: ['<all_urls>', 'https://chatgpt-proxy-500570371278.us-west2.run.app/*'],
+  permissions: ['storage', 'scripting', 'tabs', 'activeTab', 'sidePanel'],
   options_page: 'options/index.html',
   background: {
     service_worker: 'background.js',
