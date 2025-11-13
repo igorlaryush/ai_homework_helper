@@ -88,6 +88,7 @@ const StreamableMarkdown = ({
 const UI_I18N = {
   en: {
     title: 'LLM Chat',
+    rateUs: 'Rate us',
     uiOnly: 'UI only',
     toggleTheme: 'Toggle theme',
     screenshot: 'Screenshot',
@@ -189,6 +190,7 @@ const UI_I18N = {
   },
   ru: {
     title: 'LLM Чат',
+    rateUs: 'Оцените нас',
     uiOnly: 'Только UI',
     toggleTheme: 'Сменить тему',
     screenshot: 'Скриншот',
@@ -290,6 +292,7 @@ const UI_I18N = {
   },
   uk: {
     title: 'LLM Чат',
+    rateUs: 'Оцініть нас',
     uiOnly: 'Лише UI',
     toggleTheme: 'Перемкнути тему',
     screenshot: 'Скріншот',
@@ -391,6 +394,7 @@ const UI_I18N = {
   },
   de: {
     title: 'LLM-Chat',
+    rateUs: 'Bewerten Sie uns',
     uiOnly: 'Nur UI',
     toggleTheme: 'Theme umschalten',
     screenshot: 'Screenshot',
@@ -492,6 +496,7 @@ const UI_I18N = {
   },
   fr: {
     title: 'LLM Chat',
+    rateUs: 'Notez-nous',
     uiOnly: 'Interface uniquement',
     toggleTheme: 'Changer le thème',
     screenshot: "Capture d'écran",
@@ -593,6 +598,7 @@ const UI_I18N = {
   },
   es: {
     title: 'Chat LLM',
+    rateUs: 'Califícanos',
     uiOnly: 'Solo IU',
     toggleTheme: 'Cambiar tema',
     screenshot: 'Captura de pantalla',
@@ -694,6 +700,7 @@ const UI_I18N = {
   },
   pt: {
     title: 'Bate-papo LLM',
+    rateUs: 'Avalie-nos',
     uiOnly: 'Somente UI',
     toggleTheme: 'Alternar tema',
     screenshot: 'Captura de tela',
@@ -795,6 +802,7 @@ const UI_I18N = {
   },
   tr: {
     title: 'LLM Sohbet',
+    rateUs: 'Bizi değerlendirin',
     uiOnly: 'Yalnızca arayüz',
     toggleTheme: 'Temayı değiştir',
     screenshot: 'Ekran görüntüsü',
@@ -896,6 +904,7 @@ const UI_I18N = {
   },
   zh: {
     title: 'LLM 聊天',
+    rateUs: '为我们评分',
     uiOnly: '仅界面',
     toggleTheme: '切换主题',
     screenshot: '屏幕截图',
@@ -1349,6 +1358,12 @@ const STORAGE_KEYS = {
   compactMode: 'compactMode',
 } as const;
 
+// Rating links (open in new tab)
+const RATING_POSITIVE_URL =
+  'https://chromewebstore.google.com/detail/ai-homework-helper/gbihmkplhmilebglblgjgjphofpkkmhp/reviews';
+const RATING_CRITICAL_URL =
+  'https://docs.google.com/forms/d/e/1FAIpQLSey4dZTfI0HTMjmgEV4k5_ypMUFiYjGkC50KEPM_eXw94l7zA/viewform?usp=header';
+
 const SidePanel = () => {
   const { isLight } = useStorage(exampleThemeStorage);
 
@@ -1380,6 +1395,9 @@ const SidePanel = () => {
   // Editing state for user messages
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState<string>('');
+  // Header rating UI state
+  const [ratingHover, setRatingHover] = useState<number | null>(null);
+  const [ratingSelected, setRatingSelected] = useState<number | null>(null);
   const [mode, setMode] = useState<'ask' | 'read' | 'write'>('ask');
   const [writeTab, setWriteTab] = useState<'compose' | 'revise' | 'grammar' | 'paraphrase'>('compose');
   const lastResponseIdRef = useRef<string | null>(null);
@@ -1487,6 +1505,20 @@ const SidePanel = () => {
     zh: 'Chinese',
   };
   const headerTitle = mode === 'ask' ? t.title : mode === 'read' ? t.nav_read : t.nav_write;
+
+  const currentRating = ratingHover ?? ratingSelected ?? 0;
+  const ratingEmoji =
+    currentRating === 0
+      ? null
+      : currentRating === 1
+        ? '😞'
+        : currentRating === 2
+          ? '😕'
+          : currentRating === 3
+            ? '😐'
+            : currentRating === 4
+              ? '🙂'
+              : '🤩';
 
   useEffect(() => {
     if (editingMessageId) {
@@ -3345,8 +3377,58 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
       <div className={cn('relative flex h-full flex-col', isLight ? 'text-gray-900' : 'text-gray-100')}>
         {/* Header */}
         <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-gradient-to-r from-white to-slate-50 px-3 py-2 shadow-sm dark:border-slate-700 dark:from-slate-800 dark:to-slate-900">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <div className="text-base font-semibold">{headerTitle}</div>
+            {/* Rating */}
+            <div className="flex items-center gap-2">
+              <span className={cn('text-xs', isLight ? 'text-slate-500' : 'text-slate-300')}>{t.rateUs}</span>
+              <div className="flex items-center">
+                {[1, 2, 3, 4, 5].map(i => (
+                  <button
+                    key={i}
+                    type="button"
+                    aria-label={`Rate ${i} of 5`}
+                    onMouseEnter={() => setRatingHover(i)}
+                    onMouseLeave={() => setRatingHover(null)}
+                    onFocus={() => setRatingHover(i)}
+                    onBlur={() => setRatingHover(null)}
+                    onClick={() => {
+                      setRatingSelected(i);
+                      const url = i >= 4 ? RATING_POSITIVE_URL : RATING_CRITICAL_URL;
+                      if (typeof chrome !== 'undefined' && chrome.tabs?.create) {
+                        chrome.tabs.create({ url });
+                      } else {
+                        window.open(url, '_blank', 'noopener,noreferrer');
+                      }
+                    }}
+                    className={cn(
+                      'p-1 transition-transform duration-150 focus:outline-none focus:ring-0',
+                      'hover:scale-110 active:scale-95',
+                    )}>
+                    <svg
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                      className={cn(
+                        'h-4 w-4 fill-current',
+                        i <= (currentRating || 0)
+                          ? isLight
+                            ? 'text-amber-400'
+                            : 'text-amber-300'
+                          : isLight
+                            ? 'text-slate-300'
+                            : 'text-slate-600',
+                      )}>
+                      <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+                    </svg>
+                  </button>
+                ))}
+                {ratingEmoji && (
+                  <div className={cn('ml-1 text-base', isLight ? 'text-slate-700' : 'text-slate-200')}>
+                    {ratingEmoji}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
           <div className="relative flex items-center gap-2">
             {/* Theme toggle */}
