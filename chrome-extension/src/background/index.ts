@@ -246,7 +246,16 @@ chrome.runtime.onMessage.addListener((message, sender) => {
 });
 
 // Install tracking
-// Removed analytics tracking on install
+// Open welcome page on first install
+chrome.runtime.onInstalled.addListener(({ reason }) => {
+  if (reason === 'install') {
+    try {
+      chrome.tabs.create({ url: 'http://aihomeworkhelper.tilda.ws/' });
+    } catch (error) {
+      console.error(`${LOG_PREFIX} onInstalled open welcome error`, error);
+    }
+  }
+});
 
 // Keep track of connected external ports from allowed domains
 // Removed external connections from onlineapp.* domains
