@@ -1,5 +1,6 @@
 import '@src/SidePanel.css';
 import 'katex/dist/katex.min.css';
+import OnboardingTour from './components/OnboardingTour';
 import { useStorage, withErrorBoundary, withSuspense } from '@extension/shared';
 import { exampleThemeStorage } from '@extension/storage';
 import { cn, ErrorDisplay, LoadingSpinner, IconButton } from '@extension/ui';
@@ -8,6 +9,7 @@ import ReactMarkdown from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
+import type { TourStep } from './components/OnboardingTour';
 
 const normalizeMathDelimiters = (input: string): string => {
   if (!input) return input;
@@ -1356,6 +1358,7 @@ const STORAGE_KEYS = {
   llmModel: 'llmModel',
   readRecent: 'readRecentFiles',
   compactMode: 'compactMode',
+  onboardingDone: 'sidePanelOnboardingDone',
 } as const;
 
 // Rating links (open in new tab)
@@ -1547,6 +1550,69 @@ const SidePanel = () => {
     </div>
   );
 
+  // First-run onboarding tour
+  const [tourOpen, setTourOpen] = useState<boolean>(false);
+  const tourSteps = useMemo<TourStep[]>(
+    () => [
+      {
+        id: 'screenshot',
+        selector: '[data-tour-id="screenshot"]',
+        title: 'Take a screenshot',
+        content:
+          'Capture the current page or a selected area to discuss with AI. Note: some pages restrict screenshots.',
+      },
+      {
+        id: 'nav-ask',
+        selector: '[data-tour-id="nav-ask"]',
+        title: 'Mode: Ask AI',
+        content: 'Main chat mode. Ask questions and get answers from the assistant.',
+      },
+      {
+        id: 'nav-read',
+        selector: '[data-tour-id="nav-read"]',
+        title: 'Mode: Read',
+        content: 'Load and read PDFs. Discuss documents and get summaries and answers.',
+      },
+      {
+        id: 'nav-write',
+        selector: '[data-tour-id="nav-write"]',
+        title: 'Mode: Write',
+        content: 'Generate and refine text: drafts, grammar checks, and paraphrasing.',
+      },
+      {
+        id: 'model',
+        selector: '[data-tour-id="model"]',
+        title: 'Model',
+        content: 'Choose between Quick (faster) and Deep (more accurate for complex tasks).',
+      },
+      {
+        id: 'web-access',
+        selector: '[data-tour-id="web-access"]',
+        title: 'Web access',
+        content: 'Enable when you want the assistant to search the web while answering.',
+      },
+      {
+        id: 'new-chat',
+        selector: '[data-tour-id="new-chat"]',
+        title: 'New chat',
+        content: 'Start a separate conversation to keep topics organized.',
+      },
+      {
+        id: 'upload-file',
+        selector: '[data-tour-id="upload-file"]',
+        title: 'Upload PDF',
+        content: 'Attach a PDF file for reading and discussion.',
+      },
+      {
+        id: 'send',
+        selector: '[data-tour-id="send"]',
+        title: 'Send message',
+        content: 'Type your message below and press Send. Shift+Enter adds a new line.',
+      },
+    ],
+    [],
+  );
+
   // Load persisted locale, chats and toggles
   useEffect(() => {
     chrome.storage?.local
@@ -1603,6 +1669,14 @@ const SidePanel = () => {
           setMessages(active.messages);
         }
       });
+  }, []);
+
+  // Show onboarding on first run
+  useEffect(() => {
+    chrome.storage?.local.get([STORAGE_KEYS.onboardingDone]).then(store => {
+      const done = Boolean(store?.[STORAGE_KEYS.onboardingDone]);
+      if (!done) setTourOpen(true);
+    });
   }, []);
 
   useEffect(() => {
@@ -3193,6 +3267,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
       )}>
       {/* Ask AI */}
       <button
+        data-tour-id="nav-ask"
         onClick={() => setMode('ask')}
         aria-pressed={mode === 'ask'}
         className={cn(
@@ -3218,6 +3293,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
 
       {/* Read */}
       <button
+        data-tour-id="nav-read"
         onClick={() => setMode('read')}
         aria-pressed={mode === 'read'}
         className={cn(
@@ -3252,6 +3328,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
 
       {/* Write */}
       <button
+        data-tour-id="nav-write"
         onClick={() => setMode('write')}
         aria-pressed={mode === 'write'}
         className={cn(
@@ -4964,6 +5041,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
           <div className="border-t border-slate-200 px-3 py-1 dark:border-slate-700">
             <div className="flex items-center gap-2">
               <button
+                data-tour-id="new-chat"
                 onClick={onNewChat}
                 className={cn(
                   'group relative inline-flex items-center justify-center rounded-md border px-2 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
@@ -5002,6 +5080,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
               </button>
 
               <button
+                data-tour-id="screenshot"
                 onClick={requestScreenshot}
                 className={cn(
                   'group relative inline-flex items-center justify-center rounded-md border px-2 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
@@ -5041,6 +5120,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
               </button>
 
               <button
+                data-tour-id="upload-image"
                 onClick={onClickUploadImage}
                 className={cn(
                   'group relative inline-flex items-center justify-center rounded-md border px-2 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
@@ -5080,6 +5160,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
               </button>
 
               <button
+                data-tour-id="upload-file"
                 onClick={onClickUploadFile}
                 className={cn(
                   'group relative inline-flex items-center justify-center rounded-md border px-2 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
@@ -5120,6 +5201,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
               {/* Model selector popover */}
               <div
                 className="relative"
+                data-tour-id="model"
                 onBlur={e => {
                   if (!e.currentTarget.contains(e.relatedTarget as Node)) setModelPopoverOpen(false);
                 }}>
@@ -5187,6 +5269,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
               {/* Web Access toggle popover */}
               <div
                 className="relative"
+                data-tour-id="web-access"
                 onBlur={e => {
                   if (!e.currentTarget.contains(e.relatedTarget as Node)) setWebPopoverOpen(false);
                 }}>
@@ -5255,6 +5338,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
 
               {/* History button opens bottom sheet */}
               <button
+                data-tour-id="history"
                 onClick={() => setHistorySheetOpen(true)}
                 title={t.history}
                 aria-label={t.history}
@@ -5358,6 +5442,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
 
             <div className="relative">
               <textarea
+                data-tour-id="composer"
                 ref={inputRef}
                 value={input}
                 onChange={e => setInput(e.target.value)}
@@ -5389,6 +5474,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                 ✕
               </button>
               <button
+                data-tour-id="send"
                 onClick={isStreaming ? cancelStreaming : handleSend}
                 disabled={!canSend && !isStreaming}
                 className={cn(
@@ -5527,6 +5613,15 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
           </div>
         </div>
       )}
+      {/* Onboarding tour overlay */}
+      <OnboardingTour
+        open={tourOpen}
+        steps={tourSteps}
+        onClose={() => {
+          setTourOpen(false);
+          void chrome.storage?.local.set({ [STORAGE_KEYS.onboardingDone]: true });
+        }}
+      />
     </div>
   );
 };

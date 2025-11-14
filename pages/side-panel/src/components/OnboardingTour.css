@@ -1,0 +1,104 @@
+.ob-tour-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: auto;
+}
+
+.ob-tour-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.ob-tour-highlight {
+  position: absolute;
+  left: var(--tour-x);
+  top: var(--tour-y);
+  width: var(--tour-w);
+  height: var(--tour-h);
+  border-radius: 10px;
+  box-shadow:
+    0 0 0 9999px rgba(0, 0, 0, 0.55),
+    0 0 0 2px rgba(147, 51, 234, 0.9),
+    0 8px 24px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+
+.ob-tour-card {
+  position: absolute;
+  max-width: min(480px, calc(100vw - 16px));
+  min-width: min(320px, calc(100vw - 16px));
+  padding: 12px 12px 10px;
+  border-radius: 10px;
+  background: white;
+  color: #111827;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+}
+
+.ob-tour-steps {
+  font-size: 12px;
+  opacity: 0.7;
+  margin-bottom: 4px;
+}
+
+.ob-tour-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.ob-tour-content {
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.ob-tour-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ob-tour-spacer {
+  flex: 1 1 auto;
+}
+
+.ob-tour-btn {
+  appearance: none;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: #f9fafb;
+  color: #111827;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.ob-tour-btn[disabled] {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ob-tour-primary {
+  background: #7c3aed; /* violet-600 */
+  color: white;
+  border-color: rgba(124, 58, 237, 0.9);
+}
+
+@media (prefers-color-scheme: dark) {
+  .ob-tour-card {
+    background: #0f172a; /* slate-900 */
+    color: #e5e7eb;
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+  .ob-tour-btn {
+    background: #1f2937; /* gray-800 */
+    color: #e5e7eb;
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+}
+
+
