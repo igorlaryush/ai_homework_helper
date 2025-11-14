@@ -3,7 +3,7 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@src/*": ["src/*"]
+      "@/*": ["src/*"]
     },
     "types": ["chrome", "node", "./tailwind.d.ts"],
     "allowImportingTsExtensions": true

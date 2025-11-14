@@ -20,15 +20,27 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@assistant-ui/react-markdown": "^0.11.4",
+    "@extension/i18n": "workspace:*",
     "@extension/shared": "workspace:*",
     "@extension/storage": "workspace:*",
-    "@extension/i18n": "workspace:*",
     "@extension/ui": "workspace:*",
+    "@radix-ui/react-slot": "^1.2.4",
+    "@radix-ui/react-tooltip": "^1.2.8",
+    "assistant-ui": "^0.0.64",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "katex": "^0.16.11",
+    "lucide-react": "^0.553.0",
     "react-markdown": "^9.0.1",
-    "remark-gfm": "^4.0.0",
-    "remark-math": "^6.0.0",
+    "react-shiki": "^0.9.0",
     "rehype-katex": "^7.0.0",
-    "katex": "^0.16.11"
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
+    "shiki": "^3.15.0",
+    "tailwind-merge": "^3.4.0",
+    "tailwind-variants": "^3.1.1",
+    "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
     "@extension/tailwindcss-config": "workspace:*",

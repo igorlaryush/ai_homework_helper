@@ -26,10 +26,19 @@
   font-size: calc(10px + 2vmin);
 }
 
-code {
+/* Inline code only (avoid affecting Shiki block tokens) */
+:not(pre) > code {
   background: rgba(148, 163, 184, 0.5);
   border-radius: 0.25rem;
   padding: 0.2rem 0.5rem;
+}
+
+/* Reset for code blocks (Shiki and generic) */
+pre code,
+pre code span {
+  background: transparent !important;
+  border-radius: 0;
+  padding: 0;
 }
 
 /* Smooth, minimal scrollbars */

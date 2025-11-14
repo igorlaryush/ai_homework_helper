@@ -1,5 +1,5 @@
-import '@src/NewTab.css';
-import '@src/NewTab.scss';
+import '@/NewTab.css';
+import '@/NewTab.scss';
 import { t } from '@extension/i18n';
 import { PROJECT_URL_OBJECT, useStorage, withErrorBoundary, withSuspense } from '@extension/shared';
 import { exampleThemeStorage } from '@extension/storage';

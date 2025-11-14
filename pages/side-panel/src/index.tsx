@@ -1,5 +1,6 @@
-import '@src/index.css';
-import SidePanel from '@src/SidePanel';
+import '@/index.css';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import SidePanel from '@/SidePanel';
 import { createRoot } from 'react-dom/client';
 
 const LOG_PREFIX = '[CEB][SidePanel]';
@@ -21,7 +22,11 @@ const init = () => {
     throw new Error('Can not find #app-container');
   }
   const root = createRoot(appContainer);
-  root.render(<SidePanel />);
+  root.render(
+    <TooltipProvider>
+      <SidePanel />
+    </TooltipProvider>,
+  );
 };
 
 init();

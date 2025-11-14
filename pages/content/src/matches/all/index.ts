@@ -1,4 +1,4 @@
-import { sampleFunction } from '@src/sample-function';
+import { sampleFunction } from '@/sample-function';
 
 console.log('[CEB] All content script loaded');
 

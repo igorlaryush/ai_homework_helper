@@ -1,5 +1,5 @@
-import '@src/index.css';
-import Options from '@src/Options';
+import '@/index.css';
+import Options from '@/Options';
 import { createRoot } from 'react-dom/client';
 
 const init = () => {

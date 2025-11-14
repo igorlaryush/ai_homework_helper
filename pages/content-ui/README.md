@@ -9,7 +9,7 @@ This tool allows you to inject React Components into all pages specified by you.
    > [!NOTE]
    > Remember to edit import:
    > ```ts
-   > import App from '@src/matches/{new_folder}/App';
+   > import App from '@/matches/{new_folder}/App';
    > ```
 
 2. Edit `manifest.ts`:

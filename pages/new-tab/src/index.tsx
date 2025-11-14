@@ -1,5 +1,5 @@
-import '@src/index.css';
-import NewTab from '@src/NewTab';
+import '@/index.css';
+import NewTab from '@/NewTab';
 import { createRoot } from 'react-dom/client';
 
 const init = () => {

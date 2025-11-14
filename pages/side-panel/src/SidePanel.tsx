@@ -1,64 +1,12 @@
-import '@src/SidePanel.css';
+import '@/SidePanel.css';
 import 'katex/dist/katex.min.css';
 import OnboardingTour from './components/OnboardingTour';
+import { MarkdownText } from '@/components/assistant-ui/markdown-text';
 import { useStorage, withErrorBoundary, withSuspense } from '@extension/shared';
 import { exampleThemeStorage } from '@extension/storage';
 import { cn, ErrorDisplay, LoadingSpinner, IconButton } from '@extension/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import rehypeKatex from 'rehype-katex';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
 import type { TourStep } from './components/OnboardingTour';
-
-const normalizeMathDelimiters = (input: string): string => {
-  if (!input) return input;
-  // Normalize line endings first for consistent processing
-  let output = input.replace(/\r\n?/g, '\n');
-
-  // Convert TeX \[...\] and \(...\) into remark-math block/inline forms
-  output = output.replace(/\\\[([\s\S]*?)\\\]/g, (_, inner) => `$$\n${inner}\n$$`);
-  output = output.replace(/\\\(([\s\S]*?)\\\)/g, (_, inner) => `$${inner}$`);
-
-  // Ensure block math markers are clean: trim spaces on lines that are only '$$'
-  output = output.replace(/^[ \t]*\$\$[ \t]*$/gm, '$$$$');
-
-  // Aggressively collapse all spaces and blank lines AROUND block math so it
-  // stays attached to surrounding list items (no empty separating paragraphs)
-  // 1) Remove extra blank lines before opening $$ (leave at most one newline)
-  output = output.replace(/(^|\n)[ \t]*\n+[ \t]*(?=\$\$)/g, '$1');
-  // 2) Remove extra blank lines after closing $$ (leave exactly one newline)
-  output = output.replace(/(\$\$)[ \t]*\n[ \t]*\n+/g, '$1\n');
-
-  // 3) Canonical pass: eat all surrounding whitespace around complete $$...$$ blocks
-  //    while preserving a single leading newline (when not at start) and a single
-  //    trailing newline (when not at end). This prevents list breaks.
-  output = output.replace(/(^|\n)[ \t]*\n*[ \t]*(\$\$[\s\S]*?\$\$)[ \t]*\n*[ \t]*(?=\n|$)/g, '$1$2');
-
-  // Left-align content inside $$ blocks to avoid being parsed as code fences
-  const lines = output.split('\n');
-  const normalized: string[] = [];
-  let insideBlock = false;
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed === '$$') {
-      normalized.push('$$');
-      insideBlock = !insideBlock;
-      continue;
-    }
-    if (insideBlock) {
-      normalized.push(line.replace(/^[\t ]+/, ''));
-    } else {
-      normalized.push(line);
-    }
-  }
-  output = normalized.join('\n');
-
-  // Final safeguard: collapse any residual extra blank lines around $$ again
-  output = output.replace(/(^|\n)[ \t]*\n+(?=\$\$)/g, '$1').replace(/(\$\$)[ \t]*\n[ \t]*\n+/g, '$1\n');
-
-  return output;
-};
 
 const StreamableMarkdown = ({
   text,
@@ -73,16 +21,13 @@ const StreamableMarkdown = ({
   if (!content) return null;
 
   if (forcePlain) {
-    return <div className="whitespace-pre-wrap break-words">{content}</div>;
+    return <div className="whitespace-pre-wrap break-words text-lg">{content}</div>;
   }
 
   return (
-    <ReactMarkdown
-      remarkPlugins={[remarkMath, remarkGfm]}
-      rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false, trust: true }]]}
-      key={`${streaming ? 's:' : ''}${content}`}>
-      {normalizeMathDelimiters(content)}
-    </ReactMarkdown>
+    <MarkdownText className="aui-md text-lg" key={`${streaming ? 's:' : ''}${content}`}>
+      {content}
+    </MarkdownText>
   );
 };
 
@@ -1193,6 +1138,8 @@ const streamResponsesApi = async (
                       .join('')
                   : '');
               if (text) onDelta(text);
+              console.log('[CEB][LLM] Final text:', text);
+              console.log('[CEB][LLM] Full response:', json);
             } catch {
               // ignore
             }
@@ -1234,6 +1181,8 @@ const streamResponsesApi = async (
                     .join('')
                 : '');
             if (text) onDelta(text);
+            console.log('[CEB][LLM] Final text:', text);
+            console.log('[CEB][LLM] Full response:', json);
           } catch {
             // ignore
           }
@@ -1249,6 +1198,7 @@ const streamResponsesApi = async (
     const decoder = new TextDecoder('utf-8');
     let buffer = '';
     let finalResult: ResponsesResult | null = null;
+    let accumulatedText = '';
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -1275,7 +1225,10 @@ const streamResponsesApi = async (
               isRecord(data) && typeof (data as Record<string, unknown>).delta === 'string'
                 ? String((data as Record<string, unknown>).delta)
                 : '';
-            if (piece) onDelta(piece);
+            if (piece) {
+              onDelta(piece);
+              accumulatedText += piece;
+            }
           } else if (eventName === 'response.completed') {
             // Final full response object
             if (isRecord(data) && isRecord((data as Record<string, unknown>).response)) {
@@ -1289,6 +1242,8 @@ const streamResponsesApi = async (
         }
       }
     }
+    if (accumulatedText) console.log('[CEB][LLM] Final text:', accumulatedText);
+    if (finalResult) console.log('[CEB][LLM] Full response:', finalResult);
     onDone(finalResult);
   } catch (err) {
     onError(err);
@@ -3857,7 +3812,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                                   }}
                                   rows={Math.min(10, Math.max(3, editingText.split('\n').length))}
                                   className={cn(
-                                    'w-full resize-y rounded-md bg-transparent outline-none placeholder:opacity-60',
+                                    'w-full resize-y rounded-md bg-transparent text-lg outline-none placeholder:opacity-60',
                                     m.role === 'user' ? 'text-white' : undefined,
                                   )}
                                   ref={editingTextareaRef}
@@ -4187,7 +4142,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                                     }}
                                     rows={Math.min(10, Math.max(3, editingText.split('\n').length))}
                                     className={cn(
-                                      'w-full resize-y rounded-md bg-transparent outline-none placeholder:opacity-60',
+                                      'w-full resize-y rounded-md bg-transparent text-lg outline-none placeholder:opacity-60',
                                       role === 'user' ? 'text-white' : undefined,
                                     )}
                                     ref={editingTextareaRef}
@@ -5451,7 +5406,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                 rows={compactMode ? 1 : 2}
                 placeholder={t.placeholder}
                 className={cn(
-                  'w-full resize-none rounded-md border px-3 py-2 pr-12 text-sm outline-none',
+                  'w-full resize-none rounded-md border px-3 py-2 pr-12 text-lg outline-none',
                   compactMode ? 'max-h-32 min-h-[48px]' : 'max-h-40 min-h-[64px]',
                   isLight
                     ? 'border-slate-300 bg-white text-gray-900 focus:border-violet-500 focus:ring-1 focus:ring-violet-500'
