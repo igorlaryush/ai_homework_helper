@@ -18,3 +18,77 @@ body {
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
 }
+
+/* Theme tokens */
+@layer base {
+  :host,
+  :root {
+    /* Softer light theme palette with better balance of contrast */
+    --background: 210 20% 98%;
+    --foreground: 222 45% 15%;
+
+    --muted: 210 30% 96%;
+    --muted-foreground: 215 16% 42%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 45% 15%;
+
+    --border: 214 20% 88%;
+    --input: 214 20% 88%;
+
+    /* Slightly off-white cards to reduce glare on white */
+    --card: 210 20% 99%;
+    --card-foreground: 222 45% 15%;
+
+    /* Primary kept calm and legible */
+    --primary: 221 60% 45%;
+    --primary-foreground: 210 40% 98%;
+
+    /* Secondary/accent surfaces are gentle neutrals */
+    --secondary: 210 30% 96%;
+    --secondary-foreground: 222 45% 15%;
+    --accent: 210 30% 96%;
+    --accent-foreground: 222 45% 15%;
+
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 210 40% 98%;
+
+    --ring: 221 60% 52%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    /* Keep existing pleasant dark defaults (shadcn-like) */
+    --background: 224 71% 4%;
+    --foreground: 213 31% 91%;
+    --muted: 223 47% 11%;
+    --muted-foreground: 215.4 16.3% 56.9%;
+    --accent: 216 34% 17%;
+    --accent-foreground: 210 40% 98%;
+    --popover: 224 71% 4%;
+    --popover-foreground: 215 20.2% 65.1%;
+    --border: 216 34% 17%;
+    --input: 216 34% 17%;
+    --card: 224 71% 4%;
+    --card-foreground: 213 31% 91%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 1.2%;
+    --secondary: 222.2 47.4% 11.2%;
+    --secondary-foreground: 210 40% 98%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+    --ring: 216 34% 17%;
+  }
+}
+
+@layer base {
+  * {
+    /* Avoid Tailwind @apply dependency; use theme token directly */
+    border-color: hsl(var(--border));
+  }
+  body {
+    /* font-family and smoothing are already set above */
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
+}

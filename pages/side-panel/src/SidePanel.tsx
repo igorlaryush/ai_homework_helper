@@ -12,20 +12,22 @@ const StreamableMarkdown = ({
   text,
   streaming,
   forcePlain,
+  className,
 }: {
   text?: string;
   streaming: boolean;
   forcePlain?: boolean;
+  className?: string;
 }) => {
   const content = text ?? '';
   if (!content) return null;
 
   if (forcePlain) {
-    return <div className="whitespace-pre-wrap break-words text-lg">{content}</div>;
+    return <div className={cn('whitespace-pre-wrap break-words', className)}>{content}</div>;
   }
 
   return (
-    <MarkdownText className="aui-md text-lg" key={`${streaming ? 's:' : ''}${content}`}>
+    <MarkdownText className={cn('aui-md', className)} key={`${streaming ? 's:' : ''}${content}`}>
       {content}
     </MarkdownText>
   );
@@ -1314,6 +1316,7 @@ const STORAGE_KEYS = {
   readRecent: 'readRecentFiles',
   compactMode: 'compactMode',
   onboardingDone: 'sidePanelOnboardingDone',
+  fontSizeLevel: 'messageFontSizeLevel',
 } as const;
 
 // Rating links (open in new tab)
@@ -1350,6 +1353,24 @@ const SidePanel = () => {
   const [uiLocale, setUiLocale] = useState<UILocale>('en');
   const [langOpen, setLangOpen] = useState<boolean>(false);
   const [compactMode, setCompactMode] = useState<boolean>(false);
+  const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
+  const [fontSizeLevel, setFontSizeLevel] = useState<number>(2);
+  const messageFontSizeClass = useMemo(() => {
+    switch (fontSizeLevel) {
+      case 0:
+        return 'text-sm';
+      case 1:
+        return 'text-base';
+      case 2:
+        return 'text-lg';
+      case 3:
+        return 'text-xl';
+      case 4:
+        return 'text-2xl';
+      default:
+        return 'text-lg';
+    }
+  }, [fontSizeLevel]);
   // Editing state for user messages
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState<string>('');
@@ -1488,18 +1509,18 @@ const SidePanel = () => {
   const BotAvatar = () => (
     <div
       className={cn(
-        'grid h-8 w-8 shrink-0 place-items-center rounded-full',
+        'grid h-6 w-6 shrink-0 place-items-center rounded-full',
         isLight ? 'bg-violet-100 text-violet-700' : 'bg-slate-700 text-violet-300',
       )}>
-      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+      <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
         <path d="M12 3 2 8l10 5 7-3.5V15h2V8L12 3z" />
         <path d="M5 12v3.5A4.5 4.5 0 0 0 9.5 20h5A4.5 4.5 0 0 0 19 15.5V12l-7 3.5L5 12z" />
       </svg>
     </div>
   );
   const UserAvatar = () => (
-    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-violet-600 text-white">
-      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+    <div className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-violet-600 text-white">
+      <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
         <path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-4.418 0-8 2.239-8 5v1h16v-1c0-2.761-3.582-5-8-5z" />
       </svg>
     </div>
@@ -1579,6 +1600,7 @@ const SidePanel = () => {
         STORAGE_KEYS.llmModel,
         STORAGE_KEYS.readRecent,
         STORAGE_KEYS.compactMode,
+        STORAGE_KEYS.fontSizeLevel,
       ])
       .then(store => {
         const v = store?.uiLocale as UILocale | undefined;
@@ -1597,6 +1619,10 @@ const SidePanel = () => {
         setReadFiles(loadedRead);
         const loadedCompact = store?.[STORAGE_KEYS.compactMode] as boolean | undefined;
         if (typeof loadedCompact === 'boolean') setCompactMode(loadedCompact);
+        const loadedFontSizeLevel = store?.[STORAGE_KEYS.fontSizeLevel] as number | undefined;
+        if (typeof loadedFontSizeLevel === 'number' && loadedFontSizeLevel >= 0 && loadedFontSizeLevel <= 4) {
+          setFontSizeLevel(loadedFontSizeLevel);
+        }
 
         // No local API key is used
 
@@ -1652,6 +1678,9 @@ const SidePanel = () => {
   useEffect(() => {
     void chrome.storage?.local.set({ [STORAGE_KEYS.compactMode]: compactMode });
   }, [compactMode]);
+  useEffect(() => {
+    void chrome.storage?.local.set({ [STORAGE_KEYS.fontSizeLevel]: fontSizeLevel });
+  }, [fontSizeLevel]);
   // No local API key is persisted
 
   // Keep previous_response_id ref in sync with the active thread (survives reload via storage -> threads)
@@ -3405,7 +3434,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
   }, []);
 
   return (
-    <div className={cn('App', 'text-left', isLight ? 'bg-slate-50' : 'bg-gray-800')}>
+    <div className={cn('App', 'text-left', isLight ? 'bg-slate-50' : 'bg-gray-800', !isLight && 'dark')}>
       <div className={cn('relative flex h-full flex-col', isLight ? 'text-gray-900' : 'text-gray-100')}>
         {/* Header */}
         <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-gradient-to-r from-white to-slate-50 px-3 py-2 shadow-sm dark:border-slate-700 dark:from-slate-800 dark:to-slate-900">
@@ -3522,6 +3551,49 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
               )}
             </div>
 
+            {/* Settings: font size */}
+            <div
+              className="relative"
+              onBlur={e => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) setSettingsOpen(false);
+              }}>
+              <IconButton
+                onClick={() => setSettingsOpen(v => !v)}
+                ariaLabel="Settings"
+                title="Settings"
+                className={cn(
+                  isLight
+                    ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
+                    : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
+                )}>
+                <span aria-hidden="true">⚙️</span>
+              </IconButton>
+              {settingsOpen && (
+                <div
+                  className={cn(
+                    'absolute right-0 z-20 mt-2 w-60 overflow-hidden rounded-md border text-sm shadow-lg',
+                    isLight ? 'border-slate-200 bg-white text-gray-900' : 'border-slate-700 bg-slate-800 text-gray-100',
+                  )}>
+                  <div className="p-3">
+                    <div className="mb-2 flex items-center justify-between text-gray-500 dark:text-gray-400">
+                      <span className="text-xs">A</span>
+                      <span className="text-base">A</span>
+                      <span className="text-xl">A</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={4}
+                      step={1}
+                      value={fontSizeLevel}
+                      onChange={e => setFontSizeLevel(Number(e.target.value))}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* API Key input removed */}
           </div>
         </div>
@@ -3532,7 +3604,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
           <div
             ref={messagesContainerRef}
             className={cn(
-              'h-full min-h-0 flex-1 overflow-y-auto overscroll-none px-3 py-3',
+              'h-full min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-none px-3 py-3',
               isLight ? 'bg-slate-50' : 'bg-gray-800',
             )}>
             <div
@@ -3784,12 +3856,12 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                     return (
                       <div key={m.id} className="group">
                         <div
-                          className={cn('flex items-start gap-2', m.role === 'user' ? 'justify-end' : 'justify-start')}>
+                          className={cn('flex items-start gap-1', m.role === 'user' ? 'justify-end' : 'justify-start')}>
                           {m.role === 'assistant' && <BotAvatar />}
                           {m.type === 'text' ? (
                             <div
                               className={cn(
-                                'max-w-[90%] whitespace-pre-wrap break-words rounded-2xl text-left shadow-sm',
+                                'max-w-[93%] whitespace-pre-wrap break-words rounded-2xl text-left shadow-sm',
                                 compactMode ? 'px-3 py-2' : 'px-4 py-3',
                                 m.role === 'user'
                                   ? 'bg-violet-600 text-white'
@@ -3812,7 +3884,8 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                                   }}
                                   rows={Math.min(10, Math.max(3, editingText.split('\n').length))}
                                   className={cn(
-                                    'w-full resize-y rounded-md bg-transparent text-lg outline-none placeholder:opacity-60',
+                                    'w-full resize-y rounded-md bg-transparent outline-none placeholder:opacity-60',
+                                    messageFontSizeClass,
                                     m.role === 'user' ? 'text-white' : undefined,
                                   )}
                                   ref={editingTextareaRef}
@@ -3822,6 +3895,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                                   text={m.content}
                                   streaming={isStreaming && streamingMessageId === m.id}
                                   forcePlain={m.noRender === true}
+                                  className={messageFontSizeClass}
                                 />
                               )}
                               {isStreaming && streamingMessageId === m.id && (
@@ -3853,7 +3927,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                           ) : m.type === 'image' ? (
                             <div
                               className={cn(
-                                'max-w-[90%] overflow-hidden rounded-2xl shadow-sm ring-1',
+                                'max-w-[93%] overflow-hidden rounded-2xl shadow-sm ring-1',
                                 isLight ? 'ring-black/5' : 'ring-white/10',
                               )}>
                               <img src={m.dataUrl} alt="screenshot" className="block max-w-full" />
@@ -3861,7 +3935,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                           ) : (
                             <div
                               className={cn(
-                                'max-w-[90%] rounded-2xl shadow-sm ring-1',
+                                'max-w-[93%] rounded-2xl shadow-sm ring-1',
                                 isLight
                                   ? 'bg-white text-gray-900 ring-black/5'
                                   : 'bg-slate-700 text-gray-100 ring-white/10',
@@ -4112,9 +4186,9 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                   const role = block.role;
                   return (
                     <div key={`g-${block.batchId}`} className="group">
-                      <div className={cn('flex items-start gap-2', role === 'user' ? 'justify-end' : 'justify-start')}>
+                      <div className={cn('flex items-start gap-1', role === 'user' ? 'justify-end' : 'justify-start')}>
                         {role === 'assistant' && <BotAvatar />}
-                        <div className="flex max-w-[90%] flex-col gap-2">
+                        <div className="flex max-w-[93%] flex-col gap-2">
                           {block.items.map(it =>
                             it.type === 'text' ? (
                               <div
@@ -4142,7 +4216,8 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                                     }}
                                     rows={Math.min(10, Math.max(3, editingText.split('\n').length))}
                                     className={cn(
-                                      'w-full resize-y rounded-md bg-transparent text-lg outline-none placeholder:opacity-60',
+                                      'w-full resize-y rounded-md bg-transparent outline-none placeholder:opacity-60',
+                                      messageFontSizeClass,
                                       role === 'user' ? 'text-white' : undefined,
                                     )}
                                     ref={editingTextareaRef}
@@ -4152,6 +4227,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                                     text={it.content}
                                     streaming={isStreaming && streamingMessageId === it.id}
                                     forcePlain={it.noRender === true}
+                                    className={messageFontSizeClass}
                                   />
                                 )}
                                 {isStreaming && streamingMessageId === it.id && (
@@ -4512,7 +4588,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                       rows={4}
                       className={cn(
                         'w-full resize-y rounded-xl border px-3 py-2 outline-none',
-                        isLight ? 'border-slate-300 bg-white' : 'border-slate-700 bg-slate-800',
+                        isLight ? 'border-slate-300 bg-white' : 'border-slate-700 bg-gray-800',
                       )}
                     />
 
@@ -4676,7 +4752,11 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                             </div>
                           </div>
                         )}
-                        <StreamableMarkdown text={writeComposeResult} streaming={isComposeStreaming} />
+                        <StreamableMarkdown
+                          text={writeComposeResult}
+                          streaming={isComposeStreaming}
+                          className={messageFontSizeClass}
+                        />
                       </div>
                       <div className="mt-3 flex items-center gap-3">
                         <button
@@ -4725,7 +4805,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                       rows={8}
                       className={cn(
                         'w-full resize-y rounded-xl border px-3 py-2 outline-none',
-                        isLight ? 'border-slate-300 bg-white' : 'border-slate-700 bg-slate-800',
+                        isLight ? 'border-slate-300 bg-white' : 'border-slate-700 bg-gray-800',
                       )}
                     />
                     <div className="flex items-center justify-end">
@@ -4755,7 +4835,11 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                             </div>
                           </div>
                         )}
-                        <StreamableMarkdown text={writeReviseResult} streaming={isReviseStreaming} />
+                        <StreamableMarkdown
+                          text={writeReviseResult}
+                          streaming={isReviseStreaming}
+                          className={messageFontSizeClass}
+                        />
                       </div>
                       <div className="mt-3 flex items-center gap-3">
                         <button
@@ -4804,7 +4888,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                       rows={8}
                       className={cn(
                         'w-full resize-y rounded-xl border px-3 py-2 outline-none',
-                        isLight ? 'border-slate-300 bg-white' : 'border-slate-700 bg-slate-800',
+                        isLight ? 'border-slate-300 bg-white' : 'border-slate-700 bg-gray-800',
                       )}
                     />
                     <button
@@ -4909,7 +4993,11 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                             </div>
                           </div>
                         )}
-                        <StreamableMarkdown text={writeParaphraseResult} streaming={isParaphraseStreaming} />
+                        <StreamableMarkdown
+                          text={writeParaphraseResult}
+                          streaming={isParaphraseStreaming}
+                          className={messageFontSizeClass}
+                        />
                       </div>
                       <div className="mt-3 flex items-center gap-3">
                         <button
@@ -4993,7 +5081,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
 
         {/* Tools row: show only in Ask mode */}
         {mode === 'ask' && (
-          <div className="border-t border-slate-200 px-3 py-1 dark:border-slate-700">
+          <div className="composer-bar border-t border-slate-200 px-3 py-1 dark:border-slate-700">
             <div className="flex items-center gap-2">
               <button
                 data-tour-id="new-chat"
@@ -5349,7 +5437,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
 
         {/* Composer */}
         {mode === 'ask' && (
-          <div className="border-t border-slate-200 px-3 py-2 dark:border-slate-700">
+          <div className="composer-bar border-t border-slate-200 px-3 py-2 dark:border-slate-700">
             {attachments.length > 0 && (
               <div className="mb-2 flex flex-wrap gap-2">
                 {attachments.map(a => (
@@ -5410,7 +5498,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                   compactMode ? 'max-h-32 min-h-[48px]' : 'max-h-40 min-h-[64px]',
                   isLight
                     ? 'border-slate-300 bg-white text-gray-900 focus:border-violet-500 focus:ring-1 focus:ring-violet-500'
-                    : 'border-slate-600 bg-slate-700 text-gray-100 focus:border-violet-400 focus:ring-1 focus:ring-violet-400',
+                    : 'border-slate-600 bg-gray-800 text-gray-100 focus:border-violet-400 focus:ring-1 focus:ring-violet-400',
                 )}
               />
               <button
