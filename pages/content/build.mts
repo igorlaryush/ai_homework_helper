@@ -13,7 +13,7 @@ const configs = Object.entries(getContentScriptEntries(matchesDir)).map(([name, 
     mode: IS_DEV ? 'development' : undefined,
     resolve: {
       alias: {
-        '@src': srcDir,
+        '@': srcDir,
       },
     },
     publicDir: resolve(rootDir, 'public'),

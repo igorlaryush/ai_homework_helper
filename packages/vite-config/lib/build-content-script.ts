@@ -43,7 +43,7 @@ const configsBuilder = ({ matchesDir, srcDir, rootDir, contentName }: BuilderPro
       mode: IS_DEV ? 'development' : undefined,
       resolve: {
         alias: {
-          '@src': srcDir,
+          '@': srcDir,
         },
       },
       publicDir: resolve(rootDir, 'public'),
