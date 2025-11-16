@@ -5,6 +5,7 @@ import { MarkdownText } from '@/components/assistant-ui/markdown-text';
 import { useStorage, withErrorBoundary, withSuspense } from '@extension/shared';
 import { exampleThemeStorage } from '@extension/storage';
 import { cn, ErrorDisplay, LoadingSpinner, IconButton } from '@extension/ui';
+import { Moon, Sun } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TourStep } from './components/OnboardingTour';
 
@@ -3503,7 +3504,11 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                   ? 'border-slate-300 bg-white text-amber-500 hover:bg-slate-50'
                   : 'border-slate-600 bg-slate-700 text-amber-300 hover:bg-slate-600',
               )}>
-              <span aria-hidden="true">{isLight ? '🌙' : '☀️'}</span>
+              {isLight ? (
+                <Moon aria-hidden="true" className="h-5 w-5" />
+              ) : (
+                <Sun aria-hidden="true" className="h-5 w-5" />
+              )}
             </IconButton>
 
             {/* Controls: compact, language */}
@@ -3521,7 +3526,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                     ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
                     : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
                 )}>
-                <span aria-hidden="true">🌐</span>
+                <img src="icons/globe.svg" alt="" aria-hidden="true" className="h-5 w-5" />
               </IconButton>
               {langOpen && (
                 <div
@@ -3566,7 +3571,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                     ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
                     : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
                 )}>
-                <span aria-hidden="true">⚙️</span>
+                <img src="icons/settings.svg" alt="" aria-hidden="true" className="h-5 w-5" />
               </IconButton>
               {settingsOpen && (
                 <div
@@ -5494,28 +5499,50 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                 rows={compactMode ? 1 : 2}
                 placeholder={t.placeholder}
                 className={cn(
-                  'w-full resize-none rounded-md border px-3 py-2 pr-12 text-lg outline-none',
+                  'w-full resize-none rounded-md border px-3 pb-12 pr-24 pt-2 text-lg outline-none',
                   compactMode ? 'max-h-32 min-h-[48px]' : 'max-h-40 min-h-[64px]',
                   isLight
                     ? 'border-slate-300 bg-white text-gray-900 focus:border-violet-500 focus:ring-1 focus:ring-violet-500'
                     : 'border-slate-600 bg-gray-800 text-gray-100 focus:border-violet-400 focus:ring-1 focus:ring-violet-400',
                 )}
               />
-              <button
-                onClick={clearComposer}
-                disabled={input.trim().length === 0 && attachments.length === 0}
-                className={cn(
-                  'group absolute bottom-2 right-12 inline-flex h-8 w-8 items-center justify-center rounded-md text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
-                  input.trim().length > 0 || attachments.length > 0
-                    ? isLight
+              {input.trim().length > 0 && (
+                <button
+                  onClick={clearComposer}
+                  className={cn(
+                    'group absolute bottom-2 right-12 inline-flex h-8 w-8 items-center justify-center rounded-md text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
+                    isLight
                       ? 'bg-slate-200 text-gray-700 hover:bg-slate-300'
-                      : 'bg-slate-600 text-gray-100 hover:bg-slate-500'
-                    : 'bg-gray-400 text-white opacity-60',
-                )}
-                title={t.clear}
-                aria-label={t.clear}>
-                ✕
-              </button>
+                      : 'bg-slate-600 text-gray-100 hover:bg-slate-500',
+                  )}
+                  title={t.clear}
+                  aria-label={t.clear}>
+                  <svg
+                    aria-hidden="true"
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    className="h-4 w-4 group-hover:text-red-600">
+                    <path d="M3 6h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    <path
+                      d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path d="M10 11v6M14 11v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    <path
+                      d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+              )}
               <button
                 data-tour-id="send"
                 onClick={isStreaming ? cancelStreaming : handleSend}
