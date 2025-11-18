@@ -1,6 +1,8 @@
 @import '@extension/ui/global.css';
 
-html, body, #app-container {
+html,
+body,
+#app-container {
   height: 100%;
 }
 

@@ -23,7 +23,7 @@ const init = () => {
   }
   const root = createRoot(appContainer);
   root.render(
-    <TooltipProvider>
+    <TooltipProvider delayDuration={150} skipDelayDuration={0}>
       <SidePanel />
     </TooltipProvider>,
   );

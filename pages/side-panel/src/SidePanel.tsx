@@ -2,6 +2,7 @@ import '@/SidePanel.css';
 import 'katex/dist/katex.min.css';
 import OnboardingTour from './components/OnboardingTour';
 import { MarkdownText } from '@/components/assistant-ui/markdown-text';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { useStorage, withErrorBoundary, withSuspense } from '@extension/shared';
 import { exampleThemeStorage } from '@extension/storage';
 import { cn, ErrorDisplay, LoadingSpinner, IconButton } from '@extension/ui';
@@ -1328,6 +1329,11 @@ const RATING_CRITICAL_URL =
 
 const SidePanel = () => {
   const { isLight } = useStorage(exampleThemeStorage);
+
+  useEffect(() => {
+    // Ensure Radix portals (tooltips) get correct theme vars by toggling on <html>
+    document.documentElement.classList.toggle('dark', !isLight);
+  }, [isLight]);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [threads, setThreads] = useState<ChatThread[]>([]);
@@ -3251,97 +3257,109 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
         isLight ? 'border-slate-300 bg-slate-100' : 'border-slate-700 bg-slate-900',
       )}>
       {/* Ask AI */}
-      <button
-        data-tour-id="nav-ask"
-        onClick={() => setMode('ask')}
-        aria-pressed={mode === 'ask'}
-        className={cn(
-          'group flex h-10 w-10 items-center justify-center rounded-lg ring-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
-          mode === 'ask'
-            ? isLight
-              ? 'bg-violet-600 text-white ring-violet-500'
-              : 'bg-violet-600 text-white ring-violet-400'
-            : isLight
-              ? 'bg-slate-200 text-gray-900 ring-black/10 hover:bg-slate-300'
-              : 'bg-slate-700 text-white ring-white/10 hover:bg-slate-600',
-        )}
-        title={t.nav_ask}
-        aria-label={t.nav_ask}>
-        {/* star-like */}
-        <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 2l1.8 4.6L18 8.5l-4.2 2 1 4.7L12 13.7 9.2 15.2l1-4.7L6 8.5l4.2-1.9L12 2z" />
-        </svg>
-      </button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            data-tour-id="nav-ask"
+            onClick={() => setMode('ask')}
+            aria-pressed={mode === 'ask'}
+            className={cn(
+              'group flex h-10 w-10 items-center justify-center rounded-lg ring-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
+              mode === 'ask'
+                ? isLight
+                  ? 'bg-violet-600 text-white ring-violet-500'
+                  : 'bg-violet-600 text-white ring-violet-400'
+                : isLight
+                  ? 'bg-slate-200 text-gray-900 ring-black/10 hover:bg-slate-300'
+                  : 'bg-slate-700 text-white ring-white/10 hover:bg-slate-600',
+            )}
+            aria-label={t.nav_ask}>
+            {/* star-like */}
+            <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2l1.8 4.6L18 8.5l-4.2 2 1 4.7L12 13.7 9.2 15.2l1-4.7L6 8.5l4.2-1.9L12 2z" />
+            </svg>
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="right">{t.nav_ask}</TooltipContent>
+      </Tooltip>
       <div className={cn('mt-1 text-center text-[10px] font-semibold', isLight ? 'text-gray-900' : 'text-gray-100')}>
         {t.nav_ask}
       </div>
 
       {/* Read */}
-      <button
-        data-tour-id="nav-read"
-        onClick={() => setMode('read')}
-        aria-pressed={mode === 'read'}
-        className={cn(
-          'group mt-3 flex h-10 w-10 items-center justify-center rounded-lg ring-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
-          mode === 'read'
-            ? isLight
-              ? 'bg-violet-600 text-white ring-violet-500'
-              : 'bg-violet-600 text-white ring-violet-400'
-            : isLight
-              ? 'bg-slate-200 text-gray-900 ring-black/10 hover:bg-slate-300'
-              : 'bg-slate-700 text-white ring-white/10 hover:bg-slate-600',
-        )}
-        title={t.nav_read}
-        aria-label={t.nav_read}>
-        <svg
-          aria-hidden="true"
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round">
-          <path d="M3 19V6a2 2 0 0 1 2-2h6v17H5a2 2 0 0 1-2-2z" />
-          <path d="M13 21V4h6a2 2 0 0 1 2 2v13" />
-        </svg>
-      </button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            data-tour-id="nav-read"
+            onClick={() => setMode('read')}
+            aria-pressed={mode === 'read'}
+            className={cn(
+              'group mt-3 flex h-10 w-10 items-center justify-center rounded-lg ring-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
+              mode === 'read'
+                ? isLight
+                  ? 'bg-violet-600 text-white ring-violet-500'
+                  : 'bg-violet-600 text-white ring-violet-400'
+                : isLight
+                  ? 'bg-slate-200 text-gray-900 ring-black/10 hover:bg-slate-300'
+                  : 'bg-slate-700 text-white ring-white/10 hover:bg-slate-600',
+            )}
+            aria-label={t.nav_read}>
+            <svg
+              aria-hidden="true"
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round">
+              <path d="M3 19V6a2 2 0 0 1 2-2h6v17H5a2 2 0 0 1-2-2z" />
+              <path d="M13 21V4h6a2 2 0 0 1 2 2v13" />
+            </svg>
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="right">{t.nav_read}</TooltipContent>
+      </Tooltip>
       <div className={cn('mt-1 text-center text-[10px] font-semibold', isLight ? 'text-gray-900' : 'text-gray-100')}>
         {t.nav_read}
       </div>
 
       {/* Write */}
-      <button
-        data-tour-id="nav-write"
-        onClick={() => setMode('write')}
-        aria-pressed={mode === 'write'}
-        className={cn(
-          'group mt-3 flex h-10 w-10 items-center justify-center rounded-lg ring-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
-          mode === 'write'
-            ? isLight
-              ? 'bg-violet-600 text-white ring-violet-500'
-              : 'bg-violet-600 text-white ring-violet-400'
-            : isLight
-              ? 'bg-slate-200 text-gray-900 ring-black/10 hover:bg-slate-300'
-              : 'bg-slate-700 text-white ring-white/10 hover:bg-slate-600',
-        )}
-        title={t.nav_write}
-        aria-label={t.nav_write}>
-        <svg
-          aria-hidden="true"
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round">
-          <path d="M12 20h9" />
-          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
-        </svg>
-      </button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            data-tour-id="nav-write"
+            onClick={() => setMode('write')}
+            aria-pressed={mode === 'write'}
+            className={cn(
+              'group mt-3 flex h-10 w-10 items-center justify-center rounded-lg ring-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
+              mode === 'write'
+                ? isLight
+                  ? 'bg-violet-600 text-white ring-violet-500'
+                  : 'bg-violet-600 text-white ring-violet-400'
+                : isLight
+                  ? 'bg-slate-200 text-gray-900 ring-black/10 hover:bg-slate-300'
+                  : 'bg-slate-700 text-white ring-white/10 hover:bg-slate-600',
+            )}
+            aria-label={t.nav_write}>
+            <svg
+              aria-hidden="true"
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+            </svg>
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="right">{t.nav_write}</TooltipContent>
+      </Tooltip>
       <div className={cn('mt-1 text-center text-[10px] font-semibold', isLight ? 'text-gray-900' : 'text-gray-100')}>
         {t.nav_write}
       </div>
@@ -3401,38 +3419,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
     }
   }, []);
 
-  // Tooltip positioning within viewport
-  const repositionTooltip = useCallback((container: HTMLElement) => {
-    const tooltip = container.querySelector('[data-tooltip="true"]') as HTMLElement | null;
-    if (!tooltip) return;
-    // Reset to default center first
-    tooltip.style.transform = '';
-    window.requestAnimationFrame(() => {
-      const rect = tooltip.getBoundingClientRect();
-      const margin = 8;
-      let shift = 0;
-      if (rect.left < margin) {
-        shift = margin - rect.left;
-      } else if (rect.right > window.innerWidth - margin) {
-        shift = window.innerWidth - margin - rect.right;
-      }
-      tooltip.style.transform = shift !== 0 ? `translateX(calc(-50% + ${shift}px))` : '';
-    });
-  }, []);
-
-  const onTooltipEnter = useCallback(
-    (e: React.MouseEvent<HTMLSpanElement> | React.FocusEvent<HTMLSpanElement>) => {
-      repositionTooltip(e.currentTarget as unknown as HTMLElement);
-    },
-    [repositionTooltip],
-  );
-
-  const onTooltipLeave = useCallback((e: React.MouseEvent<HTMLSpanElement> | React.FocusEvent<HTMLSpanElement>) => {
-    const tooltip = (e.currentTarget as unknown as HTMLElement).querySelector(
-      '[data-tooltip="true"]',
-    ) as HTMLElement | null;
-    if (tooltip) tooltip.style.transform = '';
-  }, []);
+  // (former custom tooltip helpers removed; using Radix Tooltip instead)
 
   return (
     <div className={cn('App', 'text-left', isLight ? 'bg-slate-50' : 'bg-gray-800', !isLight && 'dark')}>
@@ -3494,22 +3481,26 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
           </div>
           <div className="relative flex items-center gap-2">
             {/* Theme toggle */}
-            <IconButton
-              onClick={exampleThemeStorage.toggle}
-              title={t.toggleTheme}
-              ariaLabel={t.toggleTheme}
-              className={cn(
-                'mt-0 text-lg',
-                isLight
-                  ? 'border-slate-300 bg-white text-amber-500 hover:bg-slate-50'
-                  : 'border-slate-600 bg-slate-700 text-amber-300 hover:bg-slate-600',
-              )}>
-              {isLight ? (
-                <Moon aria-hidden="true" className="h-5 w-5" />
-              ) : (
-                <Sun aria-hidden="true" className="h-5 w-5" />
-              )}
-            </IconButton>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <IconButton
+                  onClick={exampleThemeStorage.toggle}
+                  ariaLabel={t.toggleTheme}
+                  className={cn(
+                    'mt-0 text-lg',
+                    isLight
+                      ? 'border-slate-300 bg-white text-amber-500 hover:bg-slate-50'
+                      : 'border-slate-600 bg-slate-700 text-amber-300 hover:bg-slate-600',
+                  )}>
+                  {isLight ? (
+                    <Moon aria-hidden="true" className="h-5 w-5" />
+                  ) : (
+                    <Sun aria-hidden="true" className="h-5 w-5" />
+                  )}
+                </IconButton>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">{t.toggleTheme}</TooltipContent>
+            </Tooltip>
 
             {/* Controls: compact, language */}
             <div
@@ -3517,17 +3508,21 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
               onBlur={e => {
                 if (!e.currentTarget.contains(e.relatedTarget as Node)) setLangOpen(false);
               }}>
-              <IconButton
-                onClick={() => setLangOpen(v => !v)}
-                ariaLabel={t.langButton}
-                title={t.langButton}
-                className={cn(
-                  isLight
-                    ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
-                    : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
-                )}>
-                <img src="icons/globe.svg" alt="" aria-hidden="true" className="h-5 w-5" />
-              </IconButton>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <IconButton
+                    onClick={() => setLangOpen(v => !v)}
+                    ariaLabel={t.langButton}
+                    className={cn(
+                      isLight
+                        ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
+                        : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
+                    )}>
+                    <img src="icons/globe.svg" alt="" aria-hidden="true" className="h-5 w-5" />
+                  </IconButton>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">{t.langButton}</TooltipContent>
+              </Tooltip>
               {langOpen && (
                 <div
                   className={cn(
@@ -3562,17 +3557,21 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
               onBlur={e => {
                 if (!e.currentTarget.contains(e.relatedTarget as Node)) setSettingsOpen(false);
               }}>
-              <IconButton
-                onClick={() => setSettingsOpen(v => !v)}
-                ariaLabel="Settings"
-                title="Settings"
-                className={cn(
-                  isLight
-                    ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
-                    : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
-                )}>
-                <img src="icons/settings.svg" alt="" aria-hidden="true" className="h-5 w-5" />
-              </IconButton>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <IconButton
+                    onClick={() => setSettingsOpen(v => !v)}
+                    ariaLabel="Settings"
+                    className={cn(
+                      isLight
+                        ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
+                        : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
+                    )}>
+                    <img src="icons/settings.svg" alt="" aria-hidden="true" className="h-5 w-5" />
+                  </IconButton>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Settings</TooltipContent>
+              </Tooltip>
               {settingsOpen && (
                 <div
                   className={cn(
@@ -3961,228 +3960,144 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                           )}>
                           {m.role === 'assistant' && m.type === 'text' && (
                             <>
-                              <span
-                                className="group/regenerate relative inline-block"
-                                onMouseEnter={onTooltipEnter}
-                                onFocus={onTooltipEnter}
-                                onMouseLeave={onTooltipLeave}
-                                onBlur={onTooltipLeave}>
-                                <button
-                                  onClick={() => regenerateAssistantMessage(m.id)}
-                                  className={cn(
-                                    'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
-                                    isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
-                                  )}
-                                  title={t.write_regenerate}
-                                  aria-label={t.write_regenerate}>
-                                  ↻
-                                </button>
-                                <span
-                                  className={cn(
-                                    'pointer-events-none absolute -top-8 left-1/2 z-50 max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden whitespace-nowrap rounded px-2 py-1 text-[10px] opacity-0 transition-opacity',
-                                    isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
-                                    'group-focus-within/regenerate:opacity-100 group-hover/regenerate:opacity-100',
-                                  )}
-                                  data-tooltip="true">
-                                  {t.write_regenerate}
-                                </span>
-                              </span>
-                              <span
-                                className="group/copy relative inline-block"
-                                onMouseEnter={onTooltipEnter}
-                                onFocus={onTooltipEnter}
-                                onMouseLeave={onTooltipLeave}
-                                onBlur={onTooltipLeave}>
-                                <button
-                                  onClick={() => copyText(m.content)}
-                                  className={cn(
-                                    'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
-                                    isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
-                                  )}
-                                  title={t.write_copy}
-                                  aria-label={t.write_copy}>
-                                  <svg
-                                    aria-hidden="true"
-                                    width="16"
-                                    height="16"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round">
-                                    <rect x="9" y="9" width="13" height="13" rx="2" />
-                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                                  </svg>
-                                </button>
-                                <span
-                                  className={cn(
-                                    'pointer-events-none absolute -top-8 left-1/2 z-50 max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden whitespace-nowrap rounded px-2 py-1 text-[10px] opacity-0 transition-opacity',
-                                    isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
-                                    'group-focus-within/copy:opacity-100 group-hover/copy:opacity-100',
-                                  )}
-                                  data-tooltip="true">
-                                  {t.write_copy}
-                                </span>
-                              </span>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    onClick={() => regenerateAssistantMessage(m.id)}
+                                    className={cn(
+                                      'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
+                                      isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
+                                    )}
+                                    aria-label={t.write_regenerate}>
+                                    ↻
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top">{t.write_regenerate}</TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    onClick={() => copyText(m.content)}
+                                    className={cn(
+                                      'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
+                                      isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
+                                    )}
+                                    aria-label={t.write_copy}>
+                                    <svg
+                                      aria-hidden="true"
+                                      width="16"
+                                      height="16"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round">
+                                      <rect x="9" y="9" width="13" height="13" rx="2" />
+                                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                    </svg>
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top">{t.write_copy}</TooltipContent>
+                              </Tooltip>
                             </>
                           )}
                           {m.role === 'user' &&
                             m.type === 'text' &&
                             (editingMessageId === m.id ? (
                               <>
-                                <span
-                                  className="group/save relative inline-block"
-                                  onMouseEnter={onTooltipEnter}
-                                  onFocus={onTooltipEnter}
-                                  onMouseLeave={onTooltipLeave}
-                                  onBlur={onTooltipLeave}>
-                                  <button
-                                    onClick={saveEditMessage}
-                                    className={cn(
-                                      'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
-                                      isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
-                                    )}
-                                    title={t.save}
-                                    aria-label={t.save}>
-                                    {t.save}
-                                  </button>
-                                  <span
-                                    className={cn(
-                                      'pointer-events-none absolute -top-8 left-1/2 z-50 max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden whitespace-nowrap rounded px-2 py-1 text-[10px] opacity-0 transition-opacity',
-                                      isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
-                                      'group-focus-within/save:opacity-100 group-hover/save:opacity-100',
-                                    )}
-                                    data-tooltip="true">
-                                    {t.save}
-                                  </span>
-                                </span>
-                                <span
-                                  className="group/cancel relative inline-block"
-                                  onMouseEnter={onTooltipEnter}
-                                  onFocus={onTooltipEnter}
-                                  onMouseLeave={onTooltipLeave}
-                                  onBlur={onTooltipLeave}>
-                                  <button
-                                    onClick={cancelEditMessage}
-                                    className={cn(
-                                      'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
-                                      isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
-                                    )}
-                                    title={t.cancel}
-                                    aria-label={t.cancel}>
-                                    {t.cancel}
-                                  </button>
-                                  <span
-                                    className={cn(
-                                      'pointer-events-none absolute -top-8 left-1/2 z-50 max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden whitespace-nowrap rounded px-2 py-1 text-[10px] opacity-0 transition-opacity',
-                                      isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
-                                      'group-focus-within/cancel:opacity-100 group-hover/cancel:opacity-100',
-                                    )}
-                                    data-tooltip="true">
-                                    {t.cancel}
-                                  </span>
-                                </span>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <button
+                                      onClick={saveEditMessage}
+                                      className={cn(
+                                        'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
+                                        isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
+                                      )}
+                                      aria-label={t.save}>
+                                      {t.save}
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top">{t.save}</TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <button
+                                      onClick={cancelEditMessage}
+                                      className={cn(
+                                        'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
+                                        isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
+                                      )}
+                                      aria-label={t.cancel}>
+                                      {t.cancel}
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top">{t.cancel}</TooltipContent>
+                                </Tooltip>
                               </>
                             ) : (
-                              <span
-                                className="group/edit relative inline-block"
-                                onMouseEnter={onTooltipEnter}
-                                onFocus={onTooltipEnter}
-                                onMouseLeave={onTooltipLeave}
-                                onBlur={onTooltipLeave}>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    onClick={() => startEditMessage(m.id)}
+                                    className={cn(
+                                      'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
+                                      isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
+                                    )}
+                                    aria-label={t.edit}>
+                                    ✎
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top">{t.edit}</TooltipContent>
+                              </Tooltip>
+                            ))}
+                          {m.role === 'user' && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
                                 <button
-                                  onClick={() => startEditMessage(m.id)}
+                                  onClick={() => branchFromMessage(m.id)}
                                   className={cn(
                                     'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
                                     isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
                                   )}
-                                  title={t.edit}
-                                  aria-label={t.edit}>
-                                  ✎
+                                  aria-label={t.branchFromHere}>
+                                  ⎇
                                 </button>
-                                <span
-                                  className={cn(
-                                    'pointer-events-none absolute -top-8 left-1/2 z-50 max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden whitespace-nowrap rounded px-2 py-1 text-[10px] opacity-0 transition-opacity',
-                                    isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
-                                    'group-focus-within/edit:opacity-100 group-hover/edit:opacity-100',
-                                  )}
-                                  data-tooltip="true">
-                                  {t.edit}
-                                </span>
-                              </span>
-                            ))}
-                          {m.role === 'user' && (
-                            <span
-                              className="group/branch relative inline-block"
-                              onMouseEnter={onTooltipEnter}
-                              onFocus={onTooltipEnter}
-                              onMouseLeave={onTooltipLeave}
-                              onBlur={onTooltipLeave}>
-                              <button
-                                onClick={() => branchFromMessage(m.id)}
-                                className={cn(
-                                  'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
-                                  isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
-                                )}
-                                title={t.branchFromHere}
-                                aria-label={t.branchFromHere}>
-                                ⎇
-                              </button>
-                              <span
-                                className={cn(
-                                  'pointer-events-none absolute -top-8 left-1/2 z-50 max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden whitespace-nowrap rounded px-2 py-1 text-[10px] opacity-0 transition-opacity',
-                                  isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
-                                  'group-focus-within/branch:opacity-100 group-hover/branch:opacity-100',
-                                )}
-                                data-tooltip="true">
-                                {t.branchFromHere}
-                              </span>
-                            </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="top">{t.branchFromHere}</TooltipContent>
+                            </Tooltip>
                           )}
-                          <span
-                            className="group/delete relative inline-block"
-                            onMouseEnter={onTooltipEnter}
-                            onFocus={onTooltipEnter}
-                            onMouseLeave={onTooltipLeave}
-                            onBlur={onTooltipLeave}>
-                            <button
-                              onClick={() => deleteMessage(m.id)}
-                              className={cn(
-                                'rounded-md p-1 text-gray-400 transition-colors',
-                                isLight
-                                  ? 'hover:bg-slate-200 hover:text-red-600'
-                                  : 'hover:bg-slate-700 hover:text-red-600',
-                              )}
-                              title={t.delete}
-                              aria-label={t.delete}>
-                              <svg
-                                aria-hidden="true"
-                                width="16"
-                                height="16"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round">
-                                <path d="M3 6h18" />
-                                <path d="M8 6V4h8v2" />
-                                <path d="M19 6l-1 14H6L5 6" />
-                                <path d="M10 11v6" />
-                                <path d="M14 11v6" />
-                              </svg>
-                            </button>
-                            <span
-                              className={cn(
-                                'pointer-events-none absolute -top-8 left-1/2 z-50 max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden whitespace-nowrap rounded px-2 py-1 text-[10px] opacity-0 transition-opacity',
-                                isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
-                                'group-focus-within/delete:opacity-100 group-hover/delete:opacity-100',
-                              )}
-                              data-tooltip="true">
-                              {t.delete}
-                            </span>
-                          </span>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                onClick={() => deleteMessage(m.id)}
+                                className={cn(
+                                  'rounded-md p-1 text-gray-400 transition-colors',
+                                  isLight
+                                    ? 'hover:bg-slate-200 hover:text-red-600'
+                                    : 'hover:bg-slate-700 hover:text-red-600',
+                                )}
+                                aria-label={t.delete}>
+                                <svg
+                                  aria-hidden="true"
+                                  width="16"
+                                  height="16"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round">
+                                  <path d="M3 6h18" />
+                                  <path d="M8 6V4h8v2" />
+                                  <path d="M19 6l-1 14H6L5 6" />
+                                  <path d="M10 11v6" />
+                                  <path d="M14 11v6" />
+                                </svg>
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">{t.delete}</TooltipContent>
+                          </Tooltip>
                         </div>
                       </div>
                     );
@@ -4360,68 +4275,52 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                             </button>
                           ))}
                         {role === 'user' && (
-                          <button
-                            onClick={() => branchFromGroup(block.batchId)}
-                            className={cn(
-                              'group relative rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
-                              isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
-                            )}
-                            title={t.branchFromHere}
-                            aria-label={t.branchFromHere}>
-                            ⎇
-                            <span
-                              className={cn(
-                                'pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-[10px] opacity-0 transition-opacity',
-                                isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
-                                'group-hover:opacity-100 group-focus-visible:opacity-100',
-                              )}>
-                              {t.branchFromHere}
-                            </span>
-                          </button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                onClick={() => branchFromGroup(block.batchId)}
+                                className={cn(
+                                  'rounded-md px-2 py-1 text-gray-500 hover:text-violet-600',
+                                  isLight ? 'hover:bg-slate-200' : 'hover:bg-slate-700',
+                                )}
+                                aria-label={t.branchFromHere}>
+                                ⎇
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">{t.branchFromHere}</TooltipContent>
+                          </Tooltip>
                         )}
-                        <span
-                          className="group/delete relative inline-block"
-                          onMouseEnter={onTooltipEnter}
-                          onFocus={onTooltipEnter}
-                          onMouseLeave={onTooltipLeave}
-                          onBlur={onTooltipLeave}>
-                          <button
-                            onClick={() => deleteMessageGroup(block.batchId)}
-                            className={cn(
-                              'rounded-md p-1 text-gray-400 transition-colors',
-                              isLight
-                                ? 'hover:bg-slate-200 hover:text-red-600'
-                                : 'hover:bg-slate-700 hover:text-red-600',
-                            )}
-                            title={t.delete}
-                            aria-label={t.delete}>
-                            <svg
-                              aria-hidden="true"
-                              width="16"
-                              height="16"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round">
-                              <path d="M3 6h18" />
-                              <path d="M8 6V4h8v2" />
-                              <path d="M19 6l-1 14H6L5 6" />
-                              <path d="M10 11v6" />
-                              <path d="M14 11v6" />
-                            </svg>
-                          </button>
-                          <span
-                            className={cn(
-                              'pointer-events-none absolute -top-8 left-1/2 z-50 max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden whitespace-nowrap rounded px-2 py-1 text-[10px] opacity-0 transition-opacity',
-                              isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
-                              'group-focus-within/delete:opacity-100 group-hover/delete:opacity-100',
-                            )}
-                            data-tooltip="true">
-                            {t.delete}
-                          </span>
-                        </span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={() => deleteMessageGroup(block.batchId)}
+                              className={cn(
+                                'rounded-md p-1 text-gray-400 transition-colors',
+                                isLight
+                                  ? 'hover:bg-slate-200 hover:text-red-600'
+                                  : 'hover:bg-slate-700 hover:text-red-600',
+                              )}
+                              aria-label={t.delete}>
+                              <svg
+                                aria-hidden="true"
+                                width="16"
+                                height="16"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round">
+                                <path d="M3 6h18" />
+                                <path d="M8 6V4h8v2" />
+                                <path d="M19 6l-1 14H6L5 6" />
+                                <path d="M10 11v6" />
+                                <path d="M14 11v6" />
+                              </svg>
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">{t.delete}</TooltipContent>
+                        </Tooltip>
                       </div>
                     </div>
                   );
@@ -4498,57 +4397,69 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                           <div className="text-xs opacity-70">{(item.size / 1024 / 1024).toFixed(2)}MB</div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => openPdf(item)}
-                            className={cn(
-                              'rounded-md px-3 py-1 text-sm font-medium',
-                              isLight
-                                ? 'bg-violet-600 text-white hover:bg-violet-700'
-                                : 'bg-violet-600 text-white hover:bg-violet-500',
-                            )}
-                            aria-label={t.read_view}
-                            title={t.read_view}>
-                            {t.read_view}
-                          </button>
-                          <button
-                            onClick={() => openChatWithPdf(item)}
-                            className={cn(
-                              'rounded-md px-3 py-1 text-sm font-medium',
-                              isLight
-                                ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                                : 'bg-emerald-600 text-white hover:bg-emerald-500',
-                            )}
-                            aria-label={t.read_chat}
-                            title={t.read_chat}>
-                            {t.read_chat}
-                          </button>
-                          <button
-                            onClick={() => deletePdf(item.id)}
-                            className={cn(
-                              'rounded-md p-2 text-gray-400 transition-colors',
-                              isLight
-                                ? 'hover:bg-slate-200 hover:text-red-600'
-                                : 'hover:bg-slate-700 hover:text-red-600',
-                            )}
-                            aria-label={t.read_delete}
-                            title={t.read_delete}>
-                            <svg
-                              aria-hidden="true"
-                              width="16"
-                              height="16"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round">
-                              <path d="M3 6h18" />
-                              <path d="M8 6V4h8v2" />
-                              <path d="M19 6l-1 14H6L5 6" />
-                              <path d="M10 11v6" />
-                              <path d="M14 11v6" />
-                            </svg>
-                          </button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                onClick={() => openPdf(item)}
+                                className={cn(
+                                  'rounded-md px-3 py-1 text-sm font-medium',
+                                  isLight
+                                    ? 'bg-violet-600 text-white hover:bg-violet-700'
+                                    : 'bg-violet-600 text-white hover:bg-violet-500',
+                                )}
+                                aria-label={t.read_view}>
+                                {t.read_view}
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">{t.read_view}</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                onClick={() => openChatWithPdf(item)}
+                                className={cn(
+                                  'rounded-md px-3 py-1 text-sm font-medium',
+                                  isLight
+                                    ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                    : 'bg-emerald-600 text-white hover:bg-emerald-500',
+                                )}
+                                aria-label={t.read_chat}>
+                                {t.read_chat}
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">{t.read_chat}</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                onClick={() => deletePdf(item.id)}
+                                className={cn(
+                                  'rounded-md p-2 text-gray-400 transition-colors',
+                                  isLight
+                                    ? 'hover:bg-slate-200 hover:text-red-600'
+                                    : 'hover:bg-slate-700 hover:text-red-600',
+                                )}
+                                aria-label={t.read_delete}>
+                                <svg
+                                  aria-hidden="true"
+                                  width="16"
+                                  height="16"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round">
+                                  <path d="M3 6h18" />
+                                  <path d="M8 6V4h8v2" />
+                                  <path d="M19 6l-1 14H6L5 6" />
+                                  <path d="M10 11v6" />
+                                  <path d="M14 11v6" />
+                                </svg>
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">{t.read_delete}</TooltipContent>
+                          </Tooltip>
                         </div>
                       </div>
                     ))
@@ -4675,22 +4586,26 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                           onBlur={e => {
                             if (!e.currentTarget.contains(e.relatedTarget as Node)) setWriteLangOpen(false);
                           }}>
-                          <button
-                            onClick={() => setWriteLangOpen(v => !v)}
-                            onBlur={() => {
-                              // Ensure button blur to menu doesn't close immediately; menu wrapper handles outside blur
-                            }}
-                            className={cn(
-                              'inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm',
-                              isLight ? 'bg-slate-200 hover:bg-slate-300' : 'bg-slate-700 hover:bg-slate-600',
-                            )}
-                            aria-haspopup="listbox"
-                            aria-expanded={writeLangOpen}
-                            aria-label={t.write_language}
-                            title={t.write_language}>
-                            <span>{writeLanguage}</span>
-                            <span aria-hidden>▾</span>
-                          </button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                onClick={() => setWriteLangOpen(v => !v)}
+                                onBlur={() => {
+                                  // Ensure button blur to menu doesn't close immediately; menu wrapper handles outside blur
+                                }}
+                                className={cn(
+                                  'inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm',
+                                  isLight ? 'bg-slate-200 hover:bg-slate-300' : 'bg-slate-700 hover:bg-slate-600',
+                                )}
+                                aria-haspopup="listbox"
+                                aria-expanded={writeLangOpen}
+                                aria-label={t.write_language}>
+                                <span>{writeLanguage}</span>
+                                <span aria-hidden>▾</span>
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">{t.write_language}</TooltipContent>
+                          </Tooltip>
                           {writeLangOpen && (
                             <div
                               className={cn(
@@ -4764,38 +4679,46 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                         />
                       </div>
                       <div className="mt-3 flex items-center gap-3">
-                        <button
-                          onClick={generateCompose}
-                          className={cn(
-                            'rounded-md px-3 py-2 text-sm',
-                            isLight ? 'bg-slate-200 hover:bg-slate-300' : 'bg-slate-700 hover:bg-slate-600',
-                          )}
-                          aria-label={t.write_regenerate}
-                          title={t.write_regenerate}>
-                          ↻
-                        </button>
-                        <button
-                          onClick={() => copyText(writeComposeResult)}
-                          className={cn(
-                            'rounded-md px-3 py-2 text-sm',
-                            isLight ? 'bg-slate-200 hover:bg-slate-300' : 'bg-slate-700 hover:bg-slate-600',
-                          )}
-                          aria-label={t.write_copy}
-                          title={t.write_copy}>
-                          <svg
-                            aria-hidden="true"
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round">
-                            <rect x="9" y="9" width="13" height="13" rx="2" />
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                          </svg>
-                        </button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={generateCompose}
+                              className={cn(
+                                'rounded-md px-3 py-2 text-sm',
+                                isLight ? 'bg-slate-200 hover:bg-slate-300' : 'bg-slate-700 hover:bg-slate-600',
+                              )}
+                              aria-label={t.write_regenerate}>
+                              ↻
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">{t.write_regenerate}</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={() => copyText(writeComposeResult)}
+                              className={cn(
+                                'rounded-md px-3 py-2 text-sm',
+                                isLight ? 'bg-slate-200 hover:bg-slate-300' : 'bg-slate-700 hover:bg-slate-600',
+                              )}
+                              aria-label={t.write_copy}>
+                              <svg
+                                aria-hidden="true"
+                                width="16"
+                                height="16"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round">
+                                <rect x="9" y="9" width="13" height="13" rx="2" />
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                              </svg>
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">{t.write_copy}</TooltipContent>
+                        </Tooltip>
                       </div>
                     </div>
                   </div>
@@ -4847,38 +4770,46 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                         />
                       </div>
                       <div className="mt-3 flex items-center gap-3">
-                        <button
-                          onClick={optimizeRevise}
-                          className={cn(
-                            'rounded-md px-3 py-2 text-sm',
-                            isLight ? 'bg-slate-200 hover:bg-slate-300' : 'bg-slate-700 hover:bg-slate-600',
-                          )}
-                          aria-label={t.write_regenerate}
-                          title={t.write_regenerate}>
-                          ↻
-                        </button>
-                        <button
-                          onClick={() => copyText(writeReviseResult)}
-                          className={cn(
-                            'rounded-md px-3 py-2 text-sm',
-                            isLight ? 'bg-slate-200 hover:bg-slate-300' : 'bg-slate-700 hover:bg-slate-600',
-                          )}
-                          aria-label={t.write_copy}
-                          title={t.write_copy}>
-                          <svg
-                            aria-hidden="true"
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round">
-                            <rect x="9" y="9" width="13" height="13" rx="2" />
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                          </svg>
-                        </button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={optimizeRevise}
+                              className={cn(
+                                'rounded-md px-3 py-2 text-sm',
+                                isLight ? 'bg-slate-200 hover:bg-slate-300' : 'bg-slate-700 hover:bg-slate-600',
+                              )}
+                              aria-label={t.write_regenerate}>
+                              ↻
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">{t.write_regenerate}</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={() => copyText(writeReviseResult)}
+                              className={cn(
+                                'rounded-md px-3 py-2 text-sm',
+                                isLight ? 'bg-slate-200 hover:bg-slate-300' : 'bg-slate-700 hover:bg-slate-600',
+                              )}
+                              aria-label={t.write_copy}>
+                              <svg
+                                aria-hidden="true"
+                                width="16"
+                                height="16"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round">
+                                <rect x="9" y="9" width="13" height="13" rx="2" />
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                              </svg>
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">{t.write_copy}</TooltipContent>
+                        </Tooltip>
                       </div>
                     </div>
                   </div>
@@ -4924,38 +4855,46 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                         <StreamableMarkdown text={writeGrammarResult} streaming={isGrammarStreaming} />
                       </div>
                       <div className="mt-3 flex items-center gap-3">
-                        <button
-                          onClick={runGrammar}
-                          className={cn(
-                            'rounded-md px-3 py-2 text-sm',
-                            isLight ? 'bg-slate-200 hover:bg-slate-300' : 'bg-slate-700 hover:bg-slate-600',
-                          )}
-                          aria-label={t.write_regenerate}
-                          title={t.write_regenerate}>
-                          ↻
-                        </button>
-                        <button
-                          onClick={() => copyText(writeGrammarResult)}
-                          className={cn(
-                            'rounded-md px-3 py-2 text-sm',
-                            isLight ? 'bg-slate-200 hover:bg-slate-300' : 'bg-slate-700 hover:bg-slate-600',
-                          )}
-                          aria-label={t.write_copy}
-                          title={t.write_copy}>
-                          <svg
-                            aria-hidden="true"
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round">
-                            <rect x="9" y="9" width="13" height="13" rx="2" />
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                          </svg>
-                        </button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={runGrammar}
+                              className={cn(
+                                'rounded-md px-3 py-2 text-sm',
+                                isLight ? 'bg-slate-200 hover:bg-slate-300' : 'bg-slate-700 hover:bg-slate-600',
+                              )}
+                              aria-label={t.write_regenerate}>
+                              ↻
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">{t.write_regenerate}</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={() => copyText(writeGrammarResult)}
+                              className={cn(
+                                'rounded-md px-3 py-2 text-sm',
+                                isLight ? 'bg-slate-200 hover:bg-slate-300' : 'bg-slate-700 hover:bg-slate-600',
+                              )}
+                              aria-label={t.write_copy}>
+                              <svg
+                                aria-hidden="true"
+                                width="16"
+                                height="16"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round">
+                                <rect x="9" y="9" width="13" height="13" rx="2" />
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                              </svg>
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">{t.write_copy}</TooltipContent>
+                        </Tooltip>
                       </div>
                     </div>
                   </div>
@@ -5005,38 +4944,46 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                         />
                       </div>
                       <div className="mt-3 flex items-center gap-3">
-                        <button
-                          onClick={runParaphrase}
-                          className={cn(
-                            'rounded-md px-3 py-2 text-sm',
-                            isLight ? 'bg-slate-200 hover:bg-slate-300' : 'bg-slate-700 hover:bg-slate-600',
-                          )}
-                          aria-label={t.write_regenerate}
-                          title={t.write_regenerate}>
-                          ↻
-                        </button>
-                        <button
-                          onClick={() => copyText(writeParaphraseResult)}
-                          className={cn(
-                            'rounded-md px-3 py-2 text-sm',
-                            isLight ? 'bg-slate-200 hover:bg-slate-300' : 'bg-slate-700 hover:bg-slate-600',
-                          )}
-                          aria-label={t.write_copy}
-                          title={t.write_copy}>
-                          <svg
-                            aria-hidden="true"
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round">
-                            <rect x="9" y="9" width="13" height="13" rx="2" />
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                          </svg>
-                        </button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={runParaphrase}
+                              className={cn(
+                                'rounded-md px-3 py-2 text-sm',
+                                isLight ? 'bg-slate-200 hover:bg-slate-300' : 'bg-slate-700 hover:bg-slate-600',
+                              )}
+                              aria-label={t.write_regenerate}>
+                              ↻
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">{t.write_regenerate}</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={() => copyText(writeParaphraseResult)}
+                              className={cn(
+                                'rounded-md px-3 py-2 text-sm',
+                                isLight ? 'bg-slate-200 hover:bg-slate-300' : 'bg-slate-700 hover:bg-slate-600',
+                              )}
+                              aria-label={t.write_copy}>
+                              <svg
+                                aria-hidden="true"
+                                width="16"
+                                height="16"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round">
+                                <rect x="9" y="9" width="13" height="13" rx="2" />
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                              </svg>
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">{t.write_copy}</TooltipContent>
+                        </Tooltip>
                       </div>
                     </div>
                   </div>
@@ -5088,163 +5035,147 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
         {mode === 'ask' && (
           <div className="composer-bar border-t border-slate-200 px-3 py-1 dark:border-slate-700">
             <div className="flex items-center gap-2">
-              <button
-                data-tour-id="new-chat"
-                onClick={onNewChat}
-                className={cn(
-                  'group relative inline-flex items-center justify-center rounded-md border px-2 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
-                  newChatActive
-                    ? isLight
-                      ? 'border-violet-500 bg-violet-100 text-violet-700'
-                      : 'border-violet-400 bg-violet-700/40 text-violet-200'
-                    : isLight
-                      ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
-                      : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
-                )}
-                title={t.newChat}
-                aria-pressed={newChatActive}
-                aria-label={t.newChat}>
-                <svg
-                  aria-hidden="true"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round">
-                  <path d="M12 5v14" />
-                  <path d="M5 12h14" />
-                </svg>
-                <span
-                  className={cn(
-                    'pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity',
-                    isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
-                    'group-hover:opacity-100 group-focus-visible:opacity-100',
-                  )}>
-                  {t.newChat}
-                </span>
-              </button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    data-tour-id="new-chat"
+                    onClick={onNewChat}
+                    className={cn(
+                      'group relative inline-flex items-center justify-center rounded-md border px-2 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
+                      newChatActive
+                        ? isLight
+                          ? 'border-violet-500 bg-violet-100 text-violet-700'
+                          : 'border-violet-400 bg-violet-700/40 text-violet-200'
+                        : isLight
+                          ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
+                          : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
+                    )}
+                    aria-pressed={newChatActive}
+                    aria-label={t.newChat}>
+                    <svg
+                      aria-hidden="true"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round">
+                      <path d="M12 5v14" />
+                      <path d="M5 12h14" />
+                    </svg>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top">{t.newChat}</TooltipContent>
+              </Tooltip>
 
-              <button
-                data-tour-id="screenshot"
-                onClick={requestScreenshot}
-                className={cn(
-                  'group relative inline-flex items-center justify-center rounded-md border px-2 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
-                  screenshotActive
-                    ? isLight
-                      ? 'border-violet-500 bg-violet-100 text-violet-700'
-                      : 'border-violet-400 bg-violet-700/40 text-violet-200'
-                    : isLight
-                      ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
-                      : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
-                )}
-                title={t.screenshot}
-                aria-pressed={screenshotActive}
-                aria-label={t.screenshot}>
-                <svg
-                  aria-hidden="true"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round">
-                  <rect x="3" y="7" width="18" height="14" rx="2" />
-                  <circle cx="12" cy="14" r="4" />
-                  <path d="M9 7l1.5-2h3L15 7" />
-                </svg>
-                <span
-                  className={cn(
-                    'pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity',
-                    isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
-                    'group-hover:opacity-100 group-focus-visible:opacity-100',
-                  )}>
-                  {t.screenshot}
-                </span>
-              </button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    data-tour-id="screenshot"
+                    onClick={requestScreenshot}
+                    className={cn(
+                      'group relative inline-flex items-center justify-center rounded-md border px-2 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
+                      screenshotActive
+                        ? isLight
+                          ? 'border-violet-500 bg-violet-100 text-violet-700'
+                          : 'border-violet-400 bg-violet-700/40 text-violet-200'
+                        : isLight
+                          ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
+                          : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
+                    )}
+                    aria-pressed={screenshotActive}
+                    aria-label={t.screenshot}>
+                    <svg
+                      aria-hidden="true"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round">
+                      <rect x="3" y="7" width="18" height="14" rx="2" />
+                      <circle cx="12" cy="14" r="4" />
+                      <path d="M9 7l1.5-2h3L15 7" />
+                    </svg>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top">{t.screenshot}</TooltipContent>
+              </Tooltip>
 
-              <button
-                data-tour-id="upload-image"
-                onClick={onClickUploadImage}
-                className={cn(
-                  'group relative inline-flex items-center justify-center rounded-md border px-2 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
-                  imageActive
-                    ? isLight
-                      ? 'border-violet-500 bg-violet-100 text-violet-700'
-                      : 'border-violet-400 bg-violet-700/40 text-violet-200'
-                    : isLight
-                      ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
-                      : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
-                )}
-                title={t.uploadImage}
-                aria-pressed={imageActive}
-                aria-label={t.uploadImage}>
-                <svg
-                  aria-hidden="true"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round">
-                  <rect x="3" y="5" width="18" height="14" rx="2" />
-                  <circle cx="8" cy="9" r="1.5" />
-                  <path d="M21 16l-5-5-4 4-3-3-6 6" />
-                </svg>
-                <span
-                  className={cn(
-                    'pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity',
-                    isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
-                    'group-hover:opacity-100 group-focus-visible:opacity-100',
-                  )}>
-                  {t.uploadImage}
-                </span>
-              </button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    data-tour-id="upload-image"
+                    onClick={onClickUploadImage}
+                    className={cn(
+                      'group relative inline-flex items-center justify-center rounded-md border px-2 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
+                      imageActive
+                        ? isLight
+                          ? 'border-violet-500 bg-violet-100 text-violet-700'
+                          : 'border-violet-400 bg-violet-700/40 text-violet-200'
+                        : isLight
+                          ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
+                          : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
+                    )}
+                    aria-pressed={imageActive}
+                    aria-label={t.uploadImage}>
+                    <svg
+                      aria-hidden="true"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round">
+                      <rect x="3" y="5" width="18" height="14" rx="2" />
+                      <circle cx="8" cy="9" r="1.5" />
+                      <path d="M21 16l-5-5-4 4-3-3-6 6" />
+                    </svg>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top">{t.uploadImage}</TooltipContent>
+              </Tooltip>
 
-              <button
-                data-tour-id="upload-file"
-                onClick={onClickUploadFile}
-                className={cn(
-                  'group relative inline-flex items-center justify-center rounded-md border px-2 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
-                  fileActive
-                    ? isLight
-                      ? 'border-violet-500 bg-violet-100 text-violet-700'
-                      : 'border-violet-400 bg-violet-700/40 text-violet-200'
-                    : isLight
-                      ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
-                      : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
-                )}
-                title={t.uploadFile}
-                aria-pressed={fileActive}
-                aria-label={t.uploadFile}>
-                <svg
-                  aria-hidden="true"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round">
-                  <path d="M14 2v6h6" />
-                  <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
-                </svg>
-                <span
-                  className={cn(
-                    'pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity',
-                    isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
-                    'group-hover:opacity-100 group-focus-visible:opacity-100',
-                  )}>
-                  {t.uploadFile}
-                </span>
-              </button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    data-tour-id="upload-file"
+                    onClick={onClickUploadFile}
+                    className={cn(
+                      'group relative inline-flex items-center justify-center rounded-md border px-2 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
+                      fileActive
+                        ? isLight
+                          ? 'border-violet-500 bg-violet-100 text-violet-700'
+                          : 'border-violet-400 bg-violet-700/40 text-violet-200'
+                        : isLight
+                          ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
+                          : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
+                    )}
+                    aria-pressed={fileActive}
+                    aria-label={t.uploadFile}>
+                    <svg
+                      aria-hidden="true"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round">
+                      <path d="M14 2v6h6" />
+                      <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+                    </svg>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top">{t.uploadFile}</TooltipContent>
+              </Tooltip>
 
               {/* Model selector popover */}
               <div
@@ -5253,28 +5184,32 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                 onBlur={e => {
                   if (!e.currentTarget.contains(e.relatedTarget as Node)) setModelPopoverOpen(false);
                 }}>
-                <IconButton
-                  onClick={() => setModelPopoverOpen(v => !v)}
-                  title={t.model}
-                  ariaLabel={t.model}
-                  className={cn(
-                    isLight
-                      ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
-                      : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
-                  )}>
-                  <svg
-                    aria-hidden="true"
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round">
-                    <path d="M12 2c-3 0-5 2-5 5v1H6a4 4 0 0 0 0 8h1v1c0 3 2 5 5 5s5-2 5-5v-1h1a4 4 0 0 0 0-8h-1V7c0-3-2-5-5-5z" />
-                  </svg>
-                </IconButton>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <IconButton
+                      onClick={() => setModelPopoverOpen(v => !v)}
+                      ariaLabel={t.model}
+                      className={cn(
+                        isLight
+                          ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
+                          : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
+                      )}>
+                      <svg
+                        aria-hidden="true"
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round">
+                        <path d="M12 2c-3 0-5 2-5 5v1H6a4 4 0 0 0 0 8h1v1c0 3 2 5 5 5s5-2 5-5v-1h1a4 4 0 0 0 0-8h-1V7c0-3-2-5-5-5z" />
+                      </svg>
+                    </IconButton>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">{t.model}</TooltipContent>
+                </Tooltip>
                 {modelPopoverOpen && (
                   <div
                     className={cn(
@@ -5321,30 +5256,34 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                 onBlur={e => {
                   if (!e.currentTarget.contains(e.relatedTarget as Node)) setWebPopoverOpen(false);
                 }}>
-                <IconButton
-                  onClick={() => setWebPopoverOpen(v => !v)}
-                  title={t.webAccess}
-                  ariaLabel={t.webAccess}
-                  className={cn(
-                    isLight
-                      ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
-                      : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
-                  )}>
-                  <svg
-                    aria-hidden="true"
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round">
-                    <path d="M2 12h20" />
-                    <path d="M12 2a10 10 0 0 1 0 20a10 10 0 0 1 0-20z" />
-                    <path d="M2 12a10 5 0 0 0 20 0a10 5 0 0 0-20 0z" />
-                  </svg>
-                </IconButton>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <IconButton
+                      onClick={() => setWebPopoverOpen(v => !v)}
+                      ariaLabel={t.webAccess}
+                      className={cn(
+                        isLight
+                          ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
+                          : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
+                      )}>
+                      <svg
+                        aria-hidden="true"
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round">
+                        <path d="M2 12h20" />
+                        <path d="M12 2a10 10 0 0 1 0 20a10 10 0 0 1 0-20z" />
+                        <path d="M2 12a10 5 0 0 0 20 0a10 5 0 0 0-20 0z" />
+                      </svg>
+                    </IconButton>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">{t.webAccess}</TooltipContent>
+                </Tooltip>
                 {webPopoverOpen && (
                   <div
                     className={cn(
@@ -5385,39 +5324,35 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
               </div>
 
               {/* History button opens bottom sheet */}
-              <button
-                data-tour-id="history"
-                onClick={() => setHistorySheetOpen(true)}
-                title={t.history}
-                aria-label={t.history}
-                className={cn(
-                  'group relative inline-flex h-8 w-8 items-center justify-center rounded-md border text-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
-                  isLight
-                    ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
-                    : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
-                )}>
-                <svg
-                  aria-hidden="true"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="9" />
-                  <path d="M12 7v5l4 4" />
-                </svg>
-                <span
-                  className={cn(
-                    'pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity',
-                    isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
-                    'group-hover:opacity-100 group-focus-visible:opacity-100',
-                  )}>
-                  {t.history}
-                </span>
-              </button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    data-tour-id="history"
+                    onClick={() => setHistorySheetOpen(true)}
+                    aria-label={t.history}
+                    className={cn(
+                      'group relative inline-flex h-8 w-8 items-center justify-center rounded-md border text-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
+                      isLight
+                        ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
+                        : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
+                    )}>
+                    <svg
+                      aria-hidden="true"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M12 7v5l4 4" />
+                    </svg>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top">{t.history}</TooltipContent>
+              </Tooltip>
 
               {/* Hidden inputs */}
               <input
@@ -5507,85 +5442,85 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                 )}
               />
               {input.trim().length > 0 && (
-                <button
-                  onClick={clearComposer}
-                  className={cn(
-                    'group absolute bottom-2 right-12 inline-flex h-8 w-8 items-center justify-center rounded-md text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
-                    isLight
-                      ? 'bg-slate-200 text-gray-700 hover:bg-slate-300'
-                      : 'bg-slate-600 text-gray-100 hover:bg-slate-500',
-                  )}
-                  title={t.clear}
-                  aria-label={t.clear}>
-                  <svg
-                    aria-hidden="true"
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    className="h-4 w-4 group-hover:text-red-600">
-                    <path d="M3 6h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                    <path
-                      d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <path d="M10 11v6M14 11v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                    <path
-                      d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={clearComposer}
+                      className={cn(
+                        'group absolute bottom-2 right-12 inline-flex h-8 w-8 items-center justify-center rounded-md text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
+                        isLight
+                          ? 'bg-slate-200 text-gray-700 hover:bg-slate-300'
+                          : 'bg-slate-600 text-gray-100 hover:bg-slate-500',
+                      )}
+                      aria-label={t.clear}>
+                      <svg
+                        aria-hidden="true"
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        className="h-4 w-4 group-hover:text-red-600">
+                        <path d="M3 6h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                        <path
+                          d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        <path d="M10 11v6M14 11v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                        <path
+                          d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">{t.clear}</TooltipContent>
+                </Tooltip>
               )}
-              <button
-                data-tour-id="send"
-                onClick={isStreaming ? cancelStreaming : handleSend}
-                disabled={!canSend && !isStreaming}
-                className={cn(
-                  'group absolute bottom-2 right-2 inline-flex h-8 w-8 items-center justify-center rounded-md text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
-                  isStreaming
-                    ? 'bg-slate-500 text-white hover:bg-red-600'
-                    : canSend
-                      ? 'bg-violet-600 text-white hover:bg-violet-700'
-                      : 'bg-gray-400 text-white opacity-60',
-                )}
-                title={isStreaming ? t.cancel : t.send}
-                aria-label={isStreaming ? t.cancel : t.send}>
-                {isStreaming ? (
-                  <span
-                    aria-hidden="true"
-                    className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/90 border-t-transparent"
-                  />
-                ) : (
-                  <svg
-                    aria-hidden="true"
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round">
-                    <path d="M22 2L11 13" />
-                    <path d="M22 2l-7 20-4-9-9-4 20-7z" />
-                  </svg>
-                )}
-                <span
-                  className={cn(
-                    'pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity',
-                    isLight ? 'bg-gray-900 text-white' : 'bg-white text-gray-900',
-                    'group-hover:opacity-100 group-focus-visible:opacity-100',
-                  )}>
-                  {isStreaming ? t.cancel : t.send}
-                </span>
-              </button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    data-tour-id="send"
+                    onClick={isStreaming ? cancelStreaming : handleSend}
+                    disabled={!canSend && !isStreaming}
+                    className={cn(
+                      'group absolute bottom-2 right-2 inline-flex h-8 w-8 items-center justify-center rounded-md text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
+                      isStreaming
+                        ? 'bg-slate-500 text-white hover:bg-red-600'
+                        : canSend
+                          ? 'bg-violet-600 text-white hover:bg-violet-700'
+                          : 'bg-gray-400 text-white opacity-60',
+                    )}
+                    aria-label={isStreaming ? t.cancel : t.send}>
+                    {isStreaming ? (
+                      <span
+                        aria-hidden="true"
+                        className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/90 border-t-transparent"
+                      />
+                    ) : (
+                      <svg
+                        aria-hidden="true"
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round">
+                        <path d="M22 2L11 13" />
+                        <path d="M22 2l-7 20-4-9-9-4 20-7z" />
+                      </svg>
+                    )}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top">{isStreaming ? t.cancel : t.send}</TooltipContent>
+              </Tooltip>
             </div>
           </div>
         )}
@@ -5651,31 +5586,35 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                         {new Date(th.updatedAt).toLocaleString()}
                       </div>
                     </button>
-                    <button
-                      onClick={() => deleteThread(th.id)}
-                      className={cn(
-                        'rounded-md p-1 text-gray-400 transition-colors',
-                        isLight ? 'hover:bg-slate-200 hover:text-red-600' : 'hover:bg-slate-700 hover:text-red-600',
-                      )}
-                      title={t.deleteChat}
-                      aria-label={t.deleteChat}>
-                      <svg
-                        aria-hidden="true"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round">
-                        <path d="M3 6h18" />
-                        <path d="M8 6V4h8v2" />
-                        <path d="M19 6l-1 14H6L5 6" />
-                        <path d="M10 11v6" />
-                        <path d="M14 11v6" />
-                      </svg>
-                    </button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          onClick={() => deleteThread(th.id)}
+                          className={cn(
+                            'rounded-md p-1 text-gray-400 transition-colors',
+                            isLight ? 'hover:bg-slate-200 hover:text-red-600' : 'hover:bg-slate-700 hover:text-red-600',
+                          )}
+                          aria-label={t.deleteChat}>
+                          <svg
+                            aria-hidden="true"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round">
+                            <path d="M3 6h18" />
+                            <path d="M8 6V4h8v2" />
+                            <path d="M19 6l-1 14H6L5 6" />
+                            <path d="M10 11v6" />
+                            <path d="M14 11v6" />
+                          </svg>
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">{t.deleteChat}</TooltipContent>
+                    </Tooltip>
                   </div>
                 ))
               )}

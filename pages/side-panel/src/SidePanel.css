@@ -115,13 +115,13 @@ pre code span {
 }
 
 /* Dark theme — make composer textarea match panel gray (not black) */
-.dark .App textarea[data-tour-id="composer"],
-.App.dark textarea[data-tour-id="composer"] {
+.dark .App textarea[data-tour-id='composer'],
+.App.dark textarea[data-tour-id='composer'] {
   background-color: #1f2937 !important; /* gray-800 */
   border-color: #334155 !important; /* slate-700 */
   color: #e5e7eb; /* gray-200 */
 }
-.dark .App textarea[data-tour-id="composer"]::placeholder,
-.App.dark textarea[data-tour-id="composer"]::placeholder {
+.dark .App textarea[data-tour-id='composer']::placeholder,
+.App.dark textarea[data-tour-id='composer']::placeholder {
   color: rgba(229, 231, 235, 0.55); /* gray-200/55 */
 }
