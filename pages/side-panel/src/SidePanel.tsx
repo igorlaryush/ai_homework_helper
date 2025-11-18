@@ -250,8 +250,8 @@ const UI_I18N = {
     screenshot_not_allowed:
       'Через технічні обмеження браузера на цій сторінці не можна робити скріншоти. Будь ласка, робіть скріншоти на звичайних сайтах.',
     welcome_title: 'Чим я можу допомогти сьогодні?',
-    welcome_solve_title: 'Розв’язати навчальну задачу',
-    welcome_solve_sub: 'Допоможи розв’язати це завдання з математики й надай докладні кроки',
+    welcome_solve_title: "Розв'язати навчальну задачу",
+    welcome_solve_sub: "Допоможи розв'язати це завдання з математики й надай докладні кроки",
     welcome_write_title: 'Написати есе',
     welcome_write_sub: 'Допоможи написати історичне есе на 1000 слів',
     welcome_read_title: 'Читати PDF матеріали',
@@ -452,15 +452,15 @@ const UI_I18N = {
     toggleTheme: 'Changer le thème',
     screenshot: "Capture d'écran",
     screenshot_not_allowed:
-      'En raison de restrictions techniques du navigateur, les captures d’écran ne sont pas disponibles sur cette page. Veuillez effectuer des captures sur des sites classiques.',
-    welcome_title: 'Comment puis-je vous aider aujourd’hui ?',
-    welcome_solve_title: 'Résoudre un problème d’étude',
+      "En raison de restrictions techniques du navigateur, les captures d'écran ne sont pas disponibles sur cette page. Veuillez effectuer des captures sur des sites classiques.",
+    welcome_title: "Comment puis-je vous aider aujourd'hui ?",
+    welcome_solve_title: "Résoudre un problème d'étude",
     welcome_solve_sub: 'Aidez-moi à résoudre cet exercice de maths avec des étapes détaillées',
     welcome_write_title: 'Rédiger un essai',
-    welcome_write_sub: 'Aidez-moi à rédiger un essai d’histoire de 1000 mots',
+    welcome_write_sub: "Aidez-moi à rédiger un essai d'histoire de 1000 mots",
     welcome_read_title: 'Lire des documents PDF',
-    welcome_read_sub: 'Lire et discuter d’un PDF, obtenir des interprétations et des résumés',
-    welcome_shot_title: 'Faire une capture d’écran',
+    welcome_read_sub: "Lire et discuter d'un PDF, obtenir des interprétations et des résumés",
+    welcome_shot_title: "Faire une capture d'écran",
     welcome_shot_sub: 'Capturer la page actuelle ou une zone à discuter',
     uploadImage: 'Téléverser une image',
     uploadFile: 'Téléverser un PDF',
@@ -503,7 +503,7 @@ const UI_I18N = {
     enterApiKey: 'Entrez la clé OpenAI (commence par sk-)',
     save: 'Enregistrer',
     clear: 'Effacer',
-    missingKey: 'La clé API n’est pas définie',
+    missingKey: "La clé API n'est pas définie",
     read_drop_title: 'Cliquez ou déposez des fichiers ici.',
     read_drop_sub1: 'Types pris en charge : PDF',
     read_drop_sub2: 'Taille maximale : 10 Mo.',
@@ -765,7 +765,7 @@ const UI_I18N = {
     welcome_write_title: 'Bir deneme yaz',
     welcome_write_sub: '1000 kelimelik bir tarih denemesi yazmama yardımcı ol',
     welcome_read_title: 'PDF materyallerini oku',
-    welcome_read_sub: 'PDF’i oku ve sohbet et, yorumlar ve özetler elde et',
+    welcome_read_sub: "PDF'i oku ve sohbet et, yorumlar ve özetler elde et",
     welcome_shot_title: 'Ekran görüntüsü al',
     welcome_shot_sub: 'Tartışmak için mevcut sayfayı veya bir alanı yakala',
     uploadImage: 'Görüntü yükle',
@@ -800,7 +800,7 @@ const UI_I18N = {
     model: 'Model',
     model_quick: 'Hızlı — hızlı ve hafif',
     model_deep: 'Derin — doğru ve ağır',
-    nav_ask: 'YZ’ye sor',
+    nav_ask: "YZ'ye sor",
     nav_read: 'Oku',
     nav_write: 'Yaz',
     comingSoon: 'Yakında',
@@ -817,7 +817,7 @@ const UI_I18N = {
     read_view: 'Görüntüle',
     read_delete: 'Sil',
     read_chat: 'Sohbet',
-    read_chat_prompt: 'Bu PDF’yi özetle.',
+    read_chat_prompt: "Bu PDF'yi özetle.",
     write_compose: 'Yaz',
     write_revise: 'Gözden geçir',
     write_grammar: 'Dil bilgisi kontrolü',
@@ -1031,7 +1031,7 @@ const buildSystemPromptMarkdown = (uiLocale: string): string => {
     'All of your responses must be formatted using Markdown.',
     `Default to responding in ${languageName}. If the user explicitly requests another language or later instructions specify one, follow that.`,
     'If the user provides images (e.g., screenshots), analyze them. If they contain questions or tasks, answer or solve them directly using the image content; otherwise briefly describe what is shown and ask clarifying questions if needed.',
-    'If a task allows a short, direct answer (e.g., a number, date, or single term), first give the short answer clearly; then, on a new line, provide a concise, step-by-step explanation. If the instructions explicitly say to return only the result (e.g., “return only the corrected text”), do not add explanations.',
+    'If a task allows a short, direct answer (e.g., a number, date, or single term), first give the short answer clearly; then, on a new line, provide a concise, step-by-step explanation. If the instructions explicitly say to return only the result (e.g., "return only the corrected text"), do not add explanations.',
   ].join(' ');
 };
 
@@ -1342,6 +1342,8 @@ const SidePanel = () => {
   const [input, setInput] = useState<string>('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [screenshotActive, setScreenshotActive] = useState<boolean>(false);
+  const [screenshotError, setScreenshotError] = useState<string>('');
+  const [screenshotOverlayStarted, setScreenshotOverlayStarted] = useState<boolean>(false);
   const [imageActive, setImageActive] = useState<boolean>(false);
   const [fileActive, setFileActive] = useState<boolean>(false);
   const [newChatActive, setNewChatActive] = useState<boolean>(false);
@@ -1353,6 +1355,7 @@ const SidePanel = () => {
   // Local API key input is removed
   const lastRequestRef = useRef<{ model: string; inputPayload: unknown; fileIds?: string[] } | null>(null);
 
+  const [isInputFocused, setIsInputFocused] = useState<boolean>(false);
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
 
@@ -1407,7 +1410,26 @@ const SidePanel = () => {
   const [writeParaphraseInput, setWriteParaphraseInput] = useState<string>('');
   const [writeParaphraseResult, setWriteParaphraseResult] = useState<string>('');
   const [writeLangOpen, setWriteLangOpen] = useState<boolean>(false);
+  const [subject, setSubject] = useState<string>('Auto detection');
+  const subjects = [
+    'Auto detection',
+    'Math',
+    'Social Studies',
+    'Language',
+    'Science',
+    'History',
+    'Economics',
+    'Music',
+    'Physics',
+    'Chemistry',
+    'Biology',
+    'Art',
+    'Geography',
+    'Computer Science',
+  ];
+
   const [isComposeStreaming, setIsComposeStreaming] = useState<boolean>(false);
+  const [toolsMenuOpen, setToolsMenuOpen] = useState<boolean>(false);
   const [isReviseStreaming, setIsReviseStreaming] = useState<boolean>(false);
   const [isGrammarStreaming, setIsGrammarStreaming] = useState<boolean>(false);
   const [isParaphraseStreaming, setIsParaphraseStreaming] = useState<boolean>(false);
@@ -1415,6 +1437,8 @@ const SidePanel = () => {
 
   // Read mode state
   const [readFiles, setReadFiles] = useState<ReadFileItem[]>([]);
+  const [readDragging, setReadDragging] = useState<boolean>(false);
+  const [readActiveId, setReadActiveId] = useState<string | null>(null);
 
   // Welcome screen helpers
   const extensionIconUrl = useMemo(() => {
@@ -1424,37 +1448,18 @@ const SidePanel = () => {
       return '';
     }
   }, []);
-  const handleWelcomeSolve = useCallback(() => {
-    const content =
-      'Please provide the study problem you would like me to solve. I need the problem statement to be able to assist you.';
-    const id = `assistant-${Date.now()}`;
-    const msg: ChatMessage = { id, role: 'assistant', type: 'text', content };
-    setMessages(prev => [...prev, msg]);
-    setThreads(prev =>
-      prev.map(t => (t.id === activeId ? { ...t, updatedAt: Date.now(), messages: [...t.messages, msg] } : t)),
-    );
-  }, [activeId, setThreads]);
-  const handleWelcomeWrite = useCallback(() => setMode('write'), []);
-  const handleWelcomeRead = useCallback(() => setMode('read'), []);
-  const handleWelcomeScreenshot = useCallback(() => {
-    setScreenshotActive(true);
-    chrome.runtime.sendMessage({ type: 'SCREENSHOT_REQUEST' }).catch(() => setScreenshotActive(false));
-  }, []);
-  const [readDragging, setReadDragging] = useState<boolean>(false);
-  const [readActiveId, setReadActiveId] = useState<string | null>(null);
-  const [screenshotError, setScreenshotError] = useState<string>('');
-  const [screenshotOverlayStarted, setScreenshotOverlayStarted] = useState<boolean>(false);
-
-  const inputRef = useRef<HTMLTextAreaElement | null>(null);
-  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const imageActiveTimeoutRef = useRef<number | undefined>(undefined);
   const fileActiveTimeoutRef = useRef<number | undefined>(undefined);
   const readFileInputRef = useRef<HTMLInputElement | null>(null);
   const editingTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   // In-memory map of attachment id -> File object for uploads
   const attachmentFileMapRef = useRef<Record<string, File>>({});
+  // Flag to auto-send first screenshot taken from the welcome screen
+  const autoSendAfterScreenshotRef = useRef<boolean>(false);
 
   const t = (UI_I18N as unknown as Record<UILocale, (typeof UI_I18N)['en']>)[uiLocale] ?? UI_I18N.en;
   const langLabelKeyByCode: Record<UILocale, keyof (typeof UI_I18N)['en']> = {
@@ -2640,6 +2645,15 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
     window.setTimeout(() => setNewChatActive(false), 300);
   }, [createNewChat]);
 
+  // Welcome screen: open a new chat and auto-send the captured screenshot
+  const handleWelcomeScreenshot = useCallback(() => {
+    createNewChat();
+    setMode('ask');
+    autoSendAfterScreenshotRef.current = true;
+    setScreenshotActive(true);
+    chrome.runtime.sendMessage({ type: 'SCREENSHOT_REQUEST' }).catch(() => setScreenshotActive(false));
+  }, [createNewChat]);
+
   // Handle screenshot results and errors
   useEffect(() => {
     const onMessage = async (message: unknown) => {
@@ -2680,6 +2694,18 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
     chrome.runtime.onMessage.addListener(onMessage);
     return () => chrome.runtime.onMessage.removeListener(onMessage);
   }, [t, screenshotOverlayStarted]);
+
+  // If screenshot was initiated from welcome screen, auto-send once it is attached
+  useEffect(() => {
+    if (autoSendAfterScreenshotRef.current && attachments.some(a => a.kind === 'image')) {
+      autoSendAfterScreenshotRef.current = false;
+      // Ensure active chat exists and we're in ask mode
+      if (!activeId) createNewChat();
+      setMode('ask');
+      // Defer to next tick to allow state to settle
+      queueMicrotask(() => handleSendRef.current());
+    }
+  }, [attachments, activeId, createNewChat]);
 
   const removeAttachment = useCallback((id: string) => {
     setAttachments(prev => prev.filter(a => a.id !== id));
@@ -3253,8 +3279,8 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
   const RightToolbar = () => (
     <div
       className={cn(
-        'flex w-16 flex-col items-center gap-4 border-l p-2',
-        isLight ? 'border-slate-300 bg-slate-100' : 'border-slate-700 bg-slate-900',
+        'flex w-14 flex-col items-center gap-3 border-l p-1.5',
+        isLight ? 'border-slate-300 bg-slate-50' : 'border-slate-700 bg-slate-900',
       )}>
       {/* Ask AI */}
       <Tooltip>
@@ -3264,27 +3290,24 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
             onClick={() => setMode('ask')}
             aria-pressed={mode === 'ask'}
             className={cn(
-              'group flex h-10 w-10 items-center justify-center rounded-lg ring-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
+              'group flex h-9 w-9 items-center justify-center rounded-lg transition-colors focus-visible:outline-none',
               mode === 'ask'
                 ? isLight
-                  ? 'bg-violet-600 text-white ring-violet-500'
-                  : 'bg-violet-600 text-white ring-violet-400'
+                  ? 'bg-slate-200 text-violet-700'
+                  : 'bg-slate-700 text-violet-300'
                 : isLight
-                  ? 'bg-slate-200 text-gray-900 ring-black/10 hover:bg-slate-300'
-                  : 'bg-slate-700 text-white ring-white/10 hover:bg-slate-600',
+                  ? 'text-gray-500 hover:bg-slate-200'
+                  : 'text-gray-400 hover:bg-slate-800',
             )}
             aria-label={t.nav_ask}>
             {/* star-like */}
-            <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2l1.8 4.6L18 8.5l-4.2 2 1 4.7L12 13.7 9.2 15.2l1-4.7L6 8.5l4.2-1.9L12 2z" />
             </svg>
           </button>
         </TooltipTrigger>
-        <TooltipContent side="right">{t.nav_ask}</TooltipContent>
+        <TooltipContent side="left">{t.nav_ask}</TooltipContent>
       </Tooltip>
-      <div className={cn('mt-1 text-center text-[10px] font-semibold', isLight ? 'text-gray-900' : 'text-gray-100')}>
-        {t.nav_ask}
-      </div>
 
       {/* Read */}
       <Tooltip>
@@ -3294,20 +3317,20 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
             onClick={() => setMode('read')}
             aria-pressed={mode === 'read'}
             className={cn(
-              'group mt-3 flex h-10 w-10 items-center justify-center rounded-lg ring-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
+              'group flex h-9 w-9 items-center justify-center rounded-lg transition-colors focus-visible:outline-none',
               mode === 'read'
                 ? isLight
-                  ? 'bg-violet-600 text-white ring-violet-500'
-                  : 'bg-violet-600 text-white ring-violet-400'
+                  ? 'bg-slate-200 text-violet-700'
+                  : 'bg-slate-700 text-violet-300'
                 : isLight
-                  ? 'bg-slate-200 text-gray-900 ring-black/10 hover:bg-slate-300'
-                  : 'bg-slate-700 text-white ring-white/10 hover:bg-slate-600',
+                  ? 'text-gray-500 hover:bg-slate-200'
+                  : 'text-gray-400 hover:bg-slate-800',
             )}
             aria-label={t.nav_read}>
             <svg
               aria-hidden="true"
-              width="12"
-              height="12"
+              width="18"
+              height="18"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -3319,11 +3342,8 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
             </svg>
           </button>
         </TooltipTrigger>
-        <TooltipContent side="right">{t.nav_read}</TooltipContent>
+        <TooltipContent side="left">{t.nav_read}</TooltipContent>
       </Tooltip>
-      <div className={cn('mt-1 text-center text-[10px] font-semibold', isLight ? 'text-gray-900' : 'text-gray-100')}>
-        {t.nav_read}
-      </div>
 
       {/* Write */}
       <Tooltip>
@@ -3333,20 +3353,20 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
             onClick={() => setMode('write')}
             aria-pressed={mode === 'write'}
             className={cn(
-              'group mt-3 flex h-10 w-10 items-center justify-center rounded-lg ring-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
+              'group flex h-9 w-9 items-center justify-center rounded-lg transition-colors focus-visible:outline-none',
               mode === 'write'
                 ? isLight
-                  ? 'bg-violet-600 text-white ring-violet-500'
-                  : 'bg-violet-600 text-white ring-violet-400'
+                  ? 'bg-slate-200 text-violet-700'
+                  : 'bg-slate-700 text-violet-300'
                 : isLight
-                  ? 'bg-slate-200 text-gray-900 ring-black/10 hover:bg-slate-300'
-                  : 'bg-slate-700 text-white ring-white/10 hover:bg-slate-600',
+                  ? 'text-gray-500 hover:bg-slate-200'
+                  : 'text-gray-400 hover:bg-slate-800',
             )}
             aria-label={t.nav_write}>
             <svg
               aria-hidden="true"
-              width="12"
-              height="12"
+              width="18"
+              height="18"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -3358,11 +3378,8 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
             </svg>
           </button>
         </TooltipTrigger>
-        <TooltipContent side="right">{t.nav_write}</TooltipContent>
+        <TooltipContent side="left">{t.nav_write}</TooltipContent>
       </Tooltip>
-      <div className={cn('mt-1 text-center text-[10px] font-semibold', isLight ? 'text-gray-900' : 'text-gray-100')}>
-        {t.nav_write}
-      </div>
     </div>
   );
 
@@ -3629,229 +3646,97 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
             {mode === 'ask' ? (
               <div className={cn('flex flex-col', compactMode ? 'gap-2' : 'gap-3')}>
                 {messages.length === 0 && (
-                  <div className="flex min-h-[60vh] flex-col items-center justify-center gap-6 py-10">
-                    <div className="flex flex-col items-center gap-3">
-                      {extensionIconUrl ? (
-                        <img
-                          src={extensionIconUrl}
-                          alt="Extension icon"
-                          className="h-14 w-14 rounded-xl ring-1 ring-black/10 dark:ring-white/10"
-                        />
-                      ) : (
-                        <div
-                          className={cn(
-                            'flex h-14 w-14 items-center justify-center rounded-xl ring-1',
-                            isLight ? 'bg-white ring-black/10' : 'bg-slate-700 ring-white/10',
-                          )}>
-                          <span aria-hidden="true" className="text-xl">
-                            ✨
-                          </span>
-                        </div>
-                      )}
-                      <div className="text-center text-2xl font-semibold">
-                        {t.welcome_title ?? 'How can I assist you today?'}
-                      </div>
-                    </div>
-                    <div className="w-full max-w-xl space-y-3">
+                  <div className="flex flex-1 flex-col overflow-y-auto px-4 py-6">
+                    {/* Subject Section */}
+                    <div className="mb-6 text-center">
+                      <div className="mb-3 text-lg font-medium text-gray-500 dark:text-gray-400">Subject</div>
+                      <div className="flex flex-wrap justify-center gap-2">
+                        {subjects.map(sub => (
                       <button
-                        onClick={handleWelcomeSolve}
+                            key={sub}
+                            onClick={() => setSubject(sub)}
                         className={cn(
-                          'group flex w-full items-center justify-between gap-3 rounded-2xl p-4 ring-1 transition-all transition-colors hover:shadow-md active:scale-[0.99]',
-                          isLight
-                            ? 'bg-white ring-black/10 hover:bg-slate-50'
-                            : 'bg-slate-700 ring-white/10 hover:bg-slate-600',
-                        )}>
-                        <div className="flex items-center gap-3 text-left">
-                          <span
-                            aria-hidden="true"
-                            className={cn(
-                              'flex h-10 w-10 items-center justify-center rounded-lg',
-                              isLight ? 'bg-violet-100 text-violet-700' : 'bg-violet-700/30 text-violet-200',
-                            )}>
-                            <svg
-                              width="22"
-                              height="22"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2">
-                              <path d="M4 19.5V6a2 2 0 0 1 2-2h9" />
-                              <path d="M16 2l6 6" />
-                              <path d="M8 7h8" />
-                              <path d="M8 11h5" />
-                              <path d="M8 15h4" />
-                              <path d="M16 2v6h6" />
-                            </svg>
-                          </span>
-                          <div>
-                            <div className="text-base font-semibold">
-                              {t.welcome_solve_title ?? 'Solve study problem'}
-                            </div>
-                            <div className="text-sm opacity-70">
-                              {t.welcome_solve_sub ?? 'Help me solve this math question and provide detailed steps'}
+                              'rounded-full px-4 py-1.5 text-sm transition-colors border',
+                              subject === sub
+                                ? 'bg-violet-600 text-white border-violet-600'
+                                : isLight
+                                  ? 'bg-transparent text-gray-600 border-gray-300 hover:border-gray-400'
+                                  : 'bg-transparent text-gray-300 border-gray-600 hover:border-gray-500'
+                            )}
+                          >
+                            {sub}
+                      </button>
+                        ))}
                             </div>
                           </div>
-                        </div>
-                        <span aria-hidden className="opacity-40 group-hover:opacity-60">
-                          <svg
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2">
-                            <path d="M5 12h12" />
-                            <path d="M13 6l6 6-6 6" />
-                          </svg>
-                        </span>
-                      </button>
-                      <button
-                        onClick={handleWelcomeWrite}
-                        className={cn(
-                          'group flex w-full items-center justify-between gap-3 rounded-2xl p-4 ring-1 transition-all transition-colors hover:shadow-md active:scale-[0.99]',
-                          isLight
-                            ? 'bg-white ring-black/10 hover:bg-slate-50'
-                            : 'bg-slate-700 ring-white/10 hover:bg-slate-600',
-                        )}>
-                        <div className="flex items-center gap-3 text-left">
-                          <span
-                            aria-hidden="true"
-                            className={cn(
-                              'flex h-10 w-10 items-center justify-center rounded-lg',
-                              isLight ? 'bg-amber-100 text-amber-700' : 'bg-amber-700/30 text-amber-200',
-                            )}>
-                            <svg
-                              width="22"
-                              height="22"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2">
-                              <path d="M3 5h18" />
-                              <path d="M3 10h18" />
-                              <path d="M3 15h10" />
-                              <path d="M14 19l3-3 4 4" />
-                            </svg>
-                          </span>
-                          <div>
-                            <div className="text-base font-semibold">{t.welcome_write_title ?? 'Write an essay'}</div>
-                            <div className="text-sm opacity-70">
-                              {t.welcome_write_sub ?? 'Assist me in writing a history essay of 1000 words'}
-                            </div>
-                          </div>
-                        </div>
-                        <span aria-hidden className="opacity-40 group-hover:opacity-60">
-                          <svg
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2">
-                            <path d="M5 12h12" />
-                            <path d="M13 6l6 6-6 6" />
-                          </svg>
-                        </span>
-                      </button>
-                      <button
-                        onClick={handleWelcomeRead}
-                        className={cn(
-                          'group flex w-full items-center justify-between gap-3 rounded-2xl p-4 ring-1 transition-all transition-colors hover:shadow-md active:scale-[0.99]',
-                          isLight
-                            ? 'bg-white ring-black/10 hover:bg-slate-50'
-                            : 'bg-slate-700 ring-white/10 hover:bg-slate-600',
-                        )}>
-                        <div className="flex items-center gap-3 text-left">
-                          <span
-                            aria-hidden="true"
-                            className={cn(
-                              'flex h-10 w-10 items-center justify-center rounded-lg',
-                              isLight ? 'bg-sky-100 text-sky-700' : 'bg-sky-700/30 text-sky-200',
-                            )}>
-                            <svg
-                              width="22"
-                              height="22"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2">
-                              <rect x="3" y="4" width="18" height="16" rx="2" />
-                              <path d="M7 8h6" />
-                              <path d="M7 12h10" />
-                              <path d="M7 16h8" />
-                            </svg>
-                          </span>
-                          <div>
-                            <div className="text-base font-semibold">
-                              {t.welcome_read_title ?? 'Read PDF materials'}
-                            </div>
-                            <div className="text-sm opacity-70">
-                              {t.welcome_read_sub ??
-                                'Read and chat with pdf, obtain article interpretations and summaries'}
-                            </div>
-                          </div>
-                        </div>
-                        <span aria-hidden className="opacity-40 group-hover:opacity-60">
-                          <svg
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2">
-                            <path d="M5 12h12" />
-                            <path d="M13 6l6 6-6 6" />
-                          </svg>
-                        </span>
-                      </button>
+
+                    {/* Question Section */}
+                    <div className="mb-6 text-center">
+                      <div className="mb-3 text-lg font-medium text-gray-500 dark:text-gray-400">Question</div>
                       <button
                         onClick={handleWelcomeScreenshot}
                         className={cn(
-                          'group flex w-full items-center justify-between gap-3 rounded-2xl p-4 ring-1 transition-all transition-colors hover:shadow-md active:scale-[0.99]',
-                          isLight
-                            ? 'bg-white ring-black/10 hover:bg-slate-50'
-                            : 'bg-slate-700 ring-white/10 hover:bg-slate-600',
-                        )}>
-                        <div className="flex items-center gap-3 text-left">
-                          <span
-                            aria-hidden="true"
-                            className={cn(
-                              'flex h-10 w-10 items-center justify-center rounded-lg',
-                              isLight ? 'bg-emerald-100 text-emerald-700' : 'bg-emerald-700/30 text-emerald-200',
-                            )}>
-                            <svg
-                              width="22"
-                              height="22"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2">
+                          'w-full rounded-full py-4 flex items-center justify-center gap-2 text-lg font-semibold shadow-lg transition-transform active:scale-[0.98]',
+                          'bg-violet-600 text-white hover:bg-violet-700'
+                        )}
+                      >
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                               <rect x="3" y="7" width="18" height="14" rx="2" />
                               <circle cx="12" cy="14" r="4" />
                               <path d="M9 7l1.5-2h3L15 7" />
                             </svg>
-                          </span>
-                          <div>
-                            <div className="text-base font-semibold">{t.welcome_shot_title ?? 'Take a screenshot'}</div>
-                            <div className="text-sm opacity-70">
-                              {t.welcome_shot_sub ?? 'Capture the current page or area to discuss'}
+                        {t.screenshot || 'Screenshot'}
+                      </button>
                             </div>
+
+                    {/* Separator */}
+                    <div className="relative mb-6 text-center">
+                      <div className="absolute inset-0 flex items-center">
+                        <div className={cn("w-full border-t", isLight ? "border-gray-300" : "border-gray-700")}></div>
                           </div>
+                      <div className="relative flex justify-center">
+                        <span className={cn("px-4 text-sm text-gray-500", isLight ? "bg-slate-50" : "bg-gray-800")}>Or</span>
                         </div>
-                        <span aria-hidden className="opacity-40 group-hover:opacity-60">
-                          <svg
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2">
-                            <path d="M5 12h12" />
-                            <path d="M13 6l6 6-6 6" />
+                    </div>
+
+                    {/* Input */}
+                    <div className="mb-auto">
+                      <div className={cn(
+                        "flex items-center gap-2 rounded-full border px-4 py-3 shadow-sm",
+                        isLight ? "bg-white border-gray-300" : "bg-gray-900 border-gray-700"
+                      )}>
+                        <input
+                          type="text"
+                          value={input}
+                          onChange={e => setInput(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              if (input.trim().length > 0) {
+                                handleSend();
+                              }
+                            }
+                          }}
+                          placeholder="Type your question here..."
+                          className="flex-1 bg-transparent outline-none"
+                        />
+                        <button
+                          onClick={handleSend}
+                          disabled={!input.trim()}
+                          className={cn(
+                            "flex h-8 w-8 items-center justify-center rounded-full transition-colors",
+                            input.trim() ? "bg-violet-600 text-white" : "bg-gray-300 text-gray-500 dark:bg-gray-700"
+                          )}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                             <path d="M5 12h14" />
+                             <path d="M12 5l7 7-7 7" />
                           </svg>
-                        </span>
                       </button>
                     </div>
+                    </div>
+
+                    {/* Footer Removed */}
                   </div>
                 )}
                 {renderBlocks.map(block => {
@@ -5032,65 +4917,29 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
         )}
 
         {/* Tools row: show only in Ask mode */}
-        {mode === 'ask' && (
+        {mode === 'ask' && messages.length > 0 && (
           <div className="composer-bar border-t border-slate-200 px-3 py-1 dark:border-slate-700">
             <div className="flex items-center gap-2">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    data-tour-id="new-chat"
-                    onClick={onNewChat}
-                    className={cn(
-                      'group relative inline-flex items-center justify-center rounded-md border px-2 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
-                      newChatActive
-                        ? isLight
-                          ? 'border-violet-500 bg-violet-100 text-violet-700'
-                          : 'border-violet-400 bg-violet-700/40 text-violet-200'
-                        : isLight
-                          ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
-                          : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
-                    )}
-                    aria-pressed={newChatActive}
-                    aria-label={t.newChat}>
-                    <svg
-                      aria-hidden="true"
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round">
-                      <path d="M12 5v14" />
-                      <path d="M5 12h14" />
-                    </svg>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top">{t.newChat}</TooltipContent>
-              </Tooltip>
-
+              {/* Screenshot - Visible */}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
                     data-tour-id="screenshot"
                     onClick={requestScreenshot}
                     className={cn(
-                      'group relative inline-flex items-center justify-center rounded-md border px-2 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
+                      'group relative inline-flex items-center justify-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
                       screenshotActive
-                        ? isLight
-                          ? 'border-violet-500 bg-violet-100 text-violet-700'
-                          : 'border-violet-400 bg-violet-700/40 text-violet-200'
+                        ? 'bg-violet-600 text-white'
                         : isLight
-                          ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
-                          : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
+                          ? 'bg-violet-100 text-violet-700 hover:bg-violet-200'
+                          : 'bg-violet-900/40 text-violet-200 hover:bg-violet-900/60'
                     )}
                     aria-pressed={screenshotActive}
                     aria-label={t.screenshot}>
                     <svg
                       aria-hidden="true"
-                      width="20"
-                      height="20"
+                      width="16"
+                      height="16"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
@@ -5101,258 +4950,95 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                       <circle cx="12" cy="14" r="4" />
                       <path d="M9 7l1.5-2h3L15 7" />
                     </svg>
+                    <span>{t.screenshot || 'Screenshot'}</span>
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="top">{t.screenshot}</TooltipContent>
               </Tooltip>
 
+              {/* New Chat - Visible */}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    data-tour-id="upload-image"
-                    onClick={onClickUploadImage}
+                    data-tour-id="new-chat"
+                    onClick={onNewChat}
                     className={cn(
-                      'group relative inline-flex items-center justify-center rounded-md border px-2 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
-                      imageActive
-                        ? isLight
-                          ? 'border-violet-500 bg-violet-100 text-violet-700'
-                          : 'border-violet-400 bg-violet-700/40 text-violet-200'
+                      'group relative inline-flex items-center justify-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 active:scale-95',
+                      newChatActive
+                        ? 'bg-emerald-600 text-white'
                         : isLight
-                          ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
-                          : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
+                          ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                          : 'bg-emerald-900/40 text-emerald-200 hover:bg-emerald-900/60'
                     )}
-                    aria-pressed={imageActive}
-                    aria-label={t.uploadImage}>
-                    <svg
-                      aria-hidden="true"
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round">
-                      <rect x="3" y="5" width="18" height="14" rx="2" />
-                      <circle cx="8" cy="9" r="1.5" />
-                      <path d="M21 16l-5-5-4 4-3-3-6 6" />
+                    aria-pressed={newChatActive}
+                    aria-label={t.newChat}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 5v14" />
+                        <path d="M5 12h14" />
                     </svg>
+                    <span>{t.newChat || 'New chat'}</span>
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="top">{t.uploadImage}</TooltipContent>
+                <TooltipContent side="top">{t.newChat}</TooltipContent>
               </Tooltip>
 
+              {/* Menu Button for other tools */}
+              <div className="relative ml-auto">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    data-tour-id="upload-file"
-                    onClick={onClickUploadFile}
+                      onClick={() => setToolsMenuOpen(v => !v)}
                     className={cn(
                       'group relative inline-flex items-center justify-center rounded-md border px-2 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
-                      fileActive
-                        ? isLight
-                          ? 'border-violet-500 bg-violet-100 text-violet-700'
-                          : 'border-violet-400 bg-violet-700/40 text-violet-200'
-                        : isLight
-                          ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
-                          : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
-                    )}
-                    aria-pressed={fileActive}
-                    aria-label={t.uploadFile}>
-                    <svg
-                      aria-hidden="true"
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round">
-                      <path d="M14 2v6h6" />
-                      <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
-                    </svg>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top">{t.uploadFile}</TooltipContent>
-              </Tooltip>
-
-              {/* Model selector popover */}
-              <div
-                className="relative"
-                data-tour-id="model"
-                onBlur={e => {
-                  if (!e.currentTarget.contains(e.relatedTarget as Node)) setModelPopoverOpen(false);
-                }}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <IconButton
-                      onClick={() => setModelPopoverOpen(v => !v)}
-                      ariaLabel={t.model}
-                      className={cn(
-                        isLight
-                          ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
-                          : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
-                      )}>
-                      <svg
-                        aria-hidden="true"
-                        width="20"
-                        height="20"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round">
-                        <path d="M12 2c-3 0-5 2-5 5v1H6a4 4 0 0 0 0 8h1v1c0 3 2 5 5 5s5-2 5-5v-1h1a4 4 0 0 0 0-8h-1V7c0-3-2-5-5-5z" />
-                      </svg>
-                    </IconButton>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">{t.model}</TooltipContent>
-                </Tooltip>
-                {modelPopoverOpen && (
-                  <div
-                    className={cn(
-                      'absolute bottom-full right-0 z-20 mb-2 w-48 rounded-md border p-2 text-sm shadow-lg',
-                      isLight
-                        ? 'border-slate-200 bg-white text-gray-900'
-                        : 'border-slate-700 bg-slate-800 text-gray-100',
-                    )}>
-                    <div className="mb-2 font-medium">{t.model}</div>
-                    <button
-                      onClick={() => {
-                        setLlmModel('quick');
-                        setModelPopoverOpen(false);
-                      }}
-                      className={cn(
-                        'flex w-full items-center justify-between rounded px-2 py-1 hover:bg-slate-100 focus:bg-slate-100 dark:hover:bg-slate-700 dark:focus:bg-slate-700',
-                        llmModel === 'quick' ? 'font-semibold' : undefined,
+                         toolsMenuOpen
+                            ? isLight ? 'bg-slate-200' : 'bg-slate-700'
+                            : isLight ? 'bg-white hover:bg-slate-50 border-slate-300' : 'bg-slate-700 hover:bg-slate-600 border-slate-600'
                       )}
-                      aria-pressed={llmModel === 'quick'}>
-                      <span>{t.model_quick}</span>
-                      {llmModel === 'quick' && <span aria-hidden>✓</span>}
+                    >
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="1" />
+                        <circle cx="19" cy="12" r="1" />
+                        <circle cx="5" cy="12" r="1" />
+                    </svg>
+                  </button>
+                </TooltipTrigger>
+                  <TooltipContent side="top">Tools</TooltipContent>
+              </Tooltip>
+
+                {toolsMenuOpen && (
+                   <div className={cn(
+                      "absolute bottom-full right-0 z-50 mb-2 w-48 rounded-xl border p-1 shadow-xl backdrop-blur-md",
+                      isLight ? "bg-white/95 border-slate-200" : "bg-slate-800/95 border-slate-700"
+                   )}>
+                      {/* Uploads */}
+                      <button onClick={() => { onClickUploadImage(); setToolsMenuOpen(false); }} className={cn("flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10 text-left")}>
+                         <span className="w-5 text-center text-lg leading-none">🖼️</span> {t.uploadImage}
                     </button>
-                    <button
-                      onClick={() => {
-                        setLlmModel('deep');
-                        setModelPopoverOpen(false);
-                      }}
-                      className={cn(
-                        'mt-1 flex w-full items-center justify-between rounded px-2 py-1 hover:bg-slate-100 focus:bg-slate-100 dark:hover:bg-slate-700 dark:focus:bg-slate-700',
-                        llmModel === 'deep' ? 'font-semibold' : undefined,
-                      )}
-                      aria-pressed={llmModel === 'deep'}>
-                      <span>{t.model_deep}</span>
-                      {llmModel === 'deep' && <span aria-hidden>✓</span>}
+                      <button onClick={() => { onClickUploadFile(); setToolsMenuOpen(false); }} className={cn("flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10 text-left")}>
+                         <span className="w-5 text-center text-lg leading-none">📄</span> {t.uploadFile}
+                    </button>
+                      {/* History */}
+                       <button onClick={() => { setHistorySheetOpen(true); setToolsMenuOpen(false); }} className={cn("flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10 text-left")}>
+                         <span className="w-5 text-center text-lg leading-none">🕒</span> {t.history}
+                    </button>
+                      <div className="my-1 border-t border-black/10 dark:border-white/10" />
+                      {/* Web Access Toggle */}
+                      <button onClick={() => setWebAccessEnabled(v => !v)} className={cn("flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10 text-left")}>
+                         <div className="flex items-center gap-2"><span className="w-5 text-center text-lg leading-none">🌐</span> {t.webAccess}</div>
+                         <div className={cn("h-3 w-3 rounded-full", webAccessEnabled ? "bg-emerald-500" : "bg-gray-300 dark:bg-gray-600")} />
+                      </button>
+                      {/* Model Toggle */}
+                       <button onClick={() => setLlmModel(v => v === 'quick' ? 'deep' : 'quick')} className={cn("flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10 text-left")}>
+                         <div className="flex items-center gap-2"><span className="w-5 text-center text-lg leading-none">🧠</span> {t.model}</div>
+                         <span className="text-xs opacity-60 uppercase">{llmModel}</span>
                     </button>
                   </div>
                 )}
-              </div>
-
-              {/* Web Access toggle popover */}
-              <div
-                className="relative"
-                data-tour-id="web-access"
-                onBlur={e => {
-                  if (!e.currentTarget.contains(e.relatedTarget as Node)) setWebPopoverOpen(false);
-                }}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <IconButton
-                      onClick={() => setWebPopoverOpen(v => !v)}
-                      ariaLabel={t.webAccess}
-                      className={cn(
-                        isLight
-                          ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
-                          : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
-                      )}>
-                      <svg
-                        aria-hidden="true"
-                        width="20"
-                        height="20"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round">
-                        <path d="M2 12h20" />
-                        <path d="M12 2a10 10 0 0 1 0 20a10 10 0 0 1 0-20z" />
-                        <path d="M2 12a10 5 0 0 0 20 0a10 5 0 0 0-20 0z" />
-                      </svg>
-                    </IconButton>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">{t.webAccess}</TooltipContent>
-                </Tooltip>
-                {webPopoverOpen && (
-                  <div
-                    className={cn(
-                      'absolute bottom-full right-0 z-20 mb-2 w-44 rounded-md border p-2 text-sm shadow-lg',
-                      isLight
-                        ? 'border-slate-200 bg-white text-gray-900'
-                        : 'border-slate-700 bg-slate-800 text-gray-100',
-                    )}>
-                    <div className="mb-2 font-medium">{t.webAccess}</div>
-                    <button
-                      onClick={() => {
-                        setWebAccessEnabled(true);
-                        setWebPopoverOpen(false);
-                      }}
-                      className={cn(
-                        'flex w-full items-center justify-between rounded px-2 py-1 hover:bg-slate-100 focus:bg-slate-100 dark:hover:bg-slate-700 dark:focus:bg-slate-700',
-                        webAccessEnabled ? 'font-semibold' : undefined,
-                      )}
-                      aria-pressed={webAccessEnabled}>
-                      <span>{t.webOn}</span>
-                      {webAccessEnabled && <span aria-hidden>✓</span>}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setWebAccessEnabled(false);
-                        setWebPopoverOpen(false);
-                      }}
-                      className={cn(
-                        'mt-1 flex w-full items-center justify-between rounded px-2 py-1 hover:bg-slate-100 focus:bg-slate-100 dark:hover:bg-slate-700 dark:focus:bg-slate-700',
-                        !webAccessEnabled ? 'font-semibold' : undefined,
-                      )}
-                      aria-pressed={!webAccessEnabled}>
-                      <span>{t.webOff}</span>
-                      {!webAccessEnabled && <span aria-hidden>✓</span>}
-                    </button>
-                  </div>
+                {/* Backdrop to close menu */}
+                {toolsMenuOpen && (
+                   <div className="fixed inset-0 z-40" onClick={() => setToolsMenuOpen(false)} />
                 )}
               </div>
-
-              {/* History button opens bottom sheet */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    data-tour-id="history"
-                    onClick={() => setHistorySheetOpen(true)}
-                    aria-label={t.history}
-                    className={cn(
-                      'group relative inline-flex h-8 w-8 items-center justify-center rounded-md border text-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 active:scale-95',
-                      isLight
-                        ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
-                        : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
-                    )}>
-                    <svg
-                      aria-hidden="true"
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="9" />
-                      <path d="M12 7v5l4 4" />
-                    </svg>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top">{t.history}</TooltipContent>
-              </Tooltip>
 
               {/* Hidden inputs */}
               <input
@@ -5375,8 +5061,8 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
           </div>
         )}
 
-        {/* Composer */}
-        {mode === 'ask' && (
+        {/* Composer: hide on welcome screen (no messages) */}
+        {mode === 'ask' && messages.length > 0 && (
           <div className="composer-bar border-t border-slate-200 px-3 py-2 dark:border-slate-700">
             {attachments.length > 0 && (
               <div className="mb-2 flex flex-wrap gap-2">
@@ -5425,6 +5111,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
 
             <div className="relative">
               <textarea
+                onFocus={() => setIsInputFocused(true)}
                 data-tour-id="composer"
                 ref={inputRef}
                 value={input}
