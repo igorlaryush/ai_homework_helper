@@ -1,14 +1,17 @@
 import '@/SidePanel.css';
 import 'katex/dist/katex.min.css';
+import { Moon, Sun, History } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import OnboardingTour from './components/OnboardingTour';
+import type { TourStep } from './components/OnboardingTour';
+import { UI_I18N } from './i18n-data';
+import type { UILocale } from './i18n-data';
 import { MarkdownText } from '@/components/assistant-ui/markdown-text';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { useStorage, withErrorBoundary, withSuspense } from '@extension/shared';
 import { exampleThemeStorage } from '@extension/storage';
 import { cn, ErrorDisplay, LoadingSpinner, IconButton } from '@extension/ui';
-import { Moon, Sun } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { TourStep } from './components/OnboardingTour';
+
 
 const LOG_PREFIX = '[CEB][SidePanel]';
 
@@ -37,926 +40,6 @@ const StreamableMarkdown = ({
   );
 };
 
-// Simple UI translations for the side panel (local only)
-const UI_I18N = {
-  en: {
-    title: 'LLM Chat',
-    rateUs: 'Rate us',
-    uiOnly: 'UI only',
-    toggleTheme: 'Toggle theme',
-    screenshot: 'Screenshot',
-    screenshot_not_allowed:
-      'Due to browser technical restrictions, screenshots are not available on this page. Please take screenshots on regular websites.',
-    welcome_title: 'How can I assist you today?',
-    welcome_solve_title: 'Solve study problem',
-    welcome_solve_sub: 'Help me solve this math question and provide detailed steps',
-    welcome_write_title: 'Write an essay',
-    welcome_write_sub: 'Assist me in writing a history essay of 1000 words',
-    welcome_read_title: 'Read PDF materials',
-    welcome_read_sub: 'Read and chat with pdf, obtain article interpretations and summaries',
-    welcome_shot_title: 'Take a screenshot',
-    welcome_shot_sub: 'Capture the current page or area to discuss',
-    uploadImage: 'Upload image',
-    uploadFile: 'Upload PDF',
-    newChat: 'New chat',
-    removeAttachment: 'Remove attachment',
-    placeholder: 'Type a message... (Enter — send, Shift+Enter — new line)',
-    uiNote: 'UI only. No LLM connected.',
-    compact: 'Compact mode',
-    langButton: 'Language',
-    lang_en: 'English (English)',
-    lang_ru: 'Russian (Русский)',
-    lang_de: 'German (Deutsch)',
-    lang_es: 'Spanish (Español)',
-    lang_fr: 'French (Français)',
-    lang_pt: 'Portuguese (Português)',
-    lang_uk: 'Ukrainian (Українська)',
-    lang_tr: 'Turkish (Türkçe)',
-    lang_zh: 'Chinese (中文)',
-    history: 'History',
-    delete: 'Delete',
-    edit: 'Edit',
-    branchFromHere: 'Branch from here',
-    cancel: 'Cancel',
-    deleteChat: 'Delete chat',
-    confirmDeleteChat: 'Delete this chat?',
-    noChats: 'No chats yet',
-    send: 'Send',
-    webAccess: 'Web Access',
-    webOn: 'On',
-    webOff: 'Off',
-    model: 'Model',
-    model_quick: 'Quick – fast & lightweight',
-    model_deep: 'Deep – accurate & heavy',
-    nav_ask: 'Ask AI',
-    nav_read: 'Read',
-    nav_write: 'Write',
-    comingSoon: 'Coming soon',
-    apiKey: 'API Key',
-    setApiKey: 'Set API Key',
-    enterApiKey: 'Enter OpenAI API key (starts with sk-)',
-    save: 'Save',
-    clear: 'Clear',
-    missingKey: 'API key is not set',
-    read_drop_title: 'Click or drag files here to upload.',
-    read_drop_sub1: 'Supported file types: PDF',
-    read_drop_sub2: 'Maximum file size: 10MB.',
-    read_recent: 'Recent Files:',
-    read_view: 'View',
-    read_delete: 'Delete',
-    read_chat: 'Chat',
-    read_chat_prompt: 'Summarize this PDF.',
-    write_compose: 'Compose',
-    write_revise: 'Revise',
-    write_grammar: 'Grammar check',
-    write_paraphrase: 'Paraphraser',
-    write_format: 'Format',
-    write_tone: 'Tone',
-    write_length: 'Length',
-    write_language: 'Language',
-    write_generate: 'Generate Draft',
-    write_ai_optimize: 'AI Optimize',
-    write_regenerate: 'Regenerate',
-    write_copy: 'Copy',
-    write_result: 'Result',
-    write_compose_placeholder: 'Topic or brief...',
-    write_revise_placeholder: 'Paste text to improve...',
-    write_grammar_placeholder: 'Paste text to check...',
-    write_paraphrase_placeholder: 'Paste text to paraphrase...',
-    loading: 'Loading...',
-    chip_auto: 'Auto',
-    chip_essay: 'Essay',
-    chip_article: 'Article',
-    chip_email: 'Email',
-    chip_message: 'Message',
-    chip_comment: 'Comment',
-    chip_blog: 'Blog',
-    chip_formal: 'Formal',
-    chip_professional: 'Professional',
-    chip_funny: 'Funny',
-    chip_casual: 'Casual',
-    chip_short: 'Short',
-    chip_medium: 'Medium',
-    chip_long: 'Long',
-    contact_feature_idea: 'Got feature ideas or feedback?',
-    contact_email_cta: 'Email me:',
-  },
-  ru: {
-    title: 'LLM Чат',
-    rateUs: 'Оцените нас',
-    uiOnly: 'Только UI',
-    toggleTheme: 'Сменить тему',
-    screenshot: 'Скриншот',
-    screenshot_not_allowed:
-      'Из-за технических ограничений браузера на этой странице нельзя делать скриншоты. Пожалуйста, делайте скриншоты на обычных сайтах.',
-    welcome_title: 'Чем я могу помочь сегодня?',
-    welcome_solve_title: 'Решить учебную задачу',
-    welcome_solve_sub: 'Помоги решить задачу по математике и распиши подробные шаги',
-    welcome_write_title: 'Написать эссе',
-    welcome_write_sub: 'Помоги написать историческое эссе на 1000 слов',
-    welcome_read_title: 'Чтение PDF материалов',
-    welcome_read_sub: 'Читай и общайся с PDF, получай интерпретации и краткие выводы',
-    welcome_shot_title: 'Сделать скриншот',
-    welcome_shot_sub: 'Захвати текущую страницу или область для обсуждения',
-    uploadImage: 'Загрузить изображение',
-    uploadFile: 'Загрузить PDF',
-    newChat: 'Новый чат',
-    removeAttachment: 'Удалить вложение',
-    placeholder: 'Введите сообщение... (Enter — отправить, Shift+Enter — новая строка)',
-    uiNote: 'Только UI. Подключение LLM не выполнено.',
-    compact: 'Компактный режим',
-    langButton: 'Язык',
-    lang_en: 'English (English)',
-    lang_ru: 'Russian (Русский)',
-    lang_de: 'Немецкий (Deutsch)',
-    lang_es: 'Испанский (Español)',
-    lang_fr: 'Французский (Français)',
-    lang_pt: 'Португальский (Português)',
-    lang_uk: 'Украинский (Українська)',
-    lang_tr: 'Турецкий (Türkçe)',
-    lang_zh: 'Китайский (中文)',
-    history: 'История',
-    delete: 'Удалить',
-    edit: 'Редактировать',
-    branchFromHere: 'Ответвиться отсюда',
-    cancel: 'Отмена',
-    deleteChat: 'Удалить чат',
-    confirmDeleteChat: 'Удалить этот чат?',
-    noChats: 'Чатов пока нет',
-    send: 'Отправить',
-    webAccess: 'Доступ к вебу',
-    webOn: 'Вкл',
-    webOff: 'Выкл',
-    model: 'Модель',
-    model_quick: 'Быстрая — лёгкая и оперативная',
-    model_deep: 'Глубокая — точная, но тяжелее',
-    nav_ask: 'Ask AI',
-    nav_read: 'Read',
-    nav_write: 'Write',
-    comingSoon: 'Скоро будет',
-    apiKey: 'Ключ API',
-    setApiKey: 'Указать ключ API',
-    enterApiKey: 'Введите ключ OpenAI (начинается с sk-)',
-    save: 'Сохранить',
-    clear: 'Очистить',
-    missingKey: 'Ключ API не установлен',
-    read_drop_title: 'Нажмите или перетащите файлы сюда для загрузки.',
-    read_drop_sub1: 'Поддерживаемые форматы: PDF',
-    read_drop_sub2: 'Максимальный размер: 10MB.',
-    read_recent: 'Недавние файлы:',
-    read_view: 'Открыть',
-    read_delete: 'Удалить',
-    read_chat: 'Чат',
-    read_chat_prompt: 'Кратко перескажи этот PDF.',
-    write_compose: 'Написать',
-    write_revise: 'Редактировать',
-    write_grammar: 'Проверка грамматики',
-    write_paraphrase: 'Парафраз',
-    write_format: 'Формат',
-    write_tone: 'Тон',
-    write_length: 'Длина',
-    write_language: 'Язык',
-    write_generate: 'Сгенерировать черновик',
-    write_ai_optimize: 'AI Оптимизация',
-    write_regenerate: 'Перегенерировать',
-    write_copy: 'Копировать',
-    write_result: 'Результат',
-    write_compose_placeholder: 'Тема или бриф...',
-    write_revise_placeholder: 'Вставьте текст для улучшения...',
-    write_grammar_placeholder: 'Вставьте текст для проверки...',
-    write_paraphrase_placeholder: 'Вставьте текст для перефразирования...',
-    loading: 'Загрузка...',
-    chip_auto: 'Авто',
-    chip_essay: 'Эссе',
-    chip_article: 'Статья',
-    chip_email: 'Письмо',
-    chip_message: 'Сообщение',
-    chip_comment: 'Комментарий',
-    chip_blog: 'Блог',
-    chip_formal: 'Формальный',
-    chip_professional: 'Деловой',
-    chip_funny: 'Смешной',
-    chip_casual: 'Неформальный',
-    chip_short: 'Короткий',
-    chip_medium: 'Средний',
-    chip_long: 'Длинный',
-    contact_feature_idea: 'Есть идеи по новым функциям или предложения?',
-    contact_email_cta: 'Пишите на почту:',
-  },
-  uk: {
-    title: 'LLM Чат',
-    rateUs: 'Оцініть нас',
-    uiOnly: 'Лише UI',
-    toggleTheme: 'Перемкнути тему',
-    screenshot: 'Скріншот',
-    screenshot_not_allowed:
-      'Через технічні обмеження браузера на цій сторінці не можна робити скріншоти. Будь ласка, робіть скріншоти на звичайних сайтах.',
-    welcome_title: 'Чим я можу допомогти сьогодні?',
-    welcome_solve_title: "Розв'язати навчальну задачу",
-    welcome_solve_sub: "Допоможи розв'язати це завдання з математики й надай докладні кроки",
-    welcome_write_title: 'Написати есе',
-    welcome_write_sub: 'Допоможи написати історичне есе на 1000 слів',
-    welcome_read_title: 'Читати PDF матеріали',
-    welcome_read_sub: 'Читай і спілкуйся з PDF, отримуй інтерпретації та короткі підсумки',
-    welcome_shot_title: 'Зробити скріншот',
-    welcome_shot_sub: 'Захопи поточну сторінку або область для обговорення',
-    uploadImage: 'Завантажити зображення',
-    uploadFile: 'Завантажити PDF',
-    newChat: 'Новий чат',
-    removeAttachment: 'Видалити вкладення',
-    placeholder: 'Введіть повідомлення... (Enter — надіслати, Shift+Enter — новий рядок)',
-    uiNote: 'Лише UI. Підключення LLM не виконано.',
-    compact: 'Компактний режим',
-    langButton: 'Мова',
-    lang_en: 'English (English)',
-    lang_ru: 'Russian (Русский)',
-    lang_de: 'German (Deutsch)',
-    lang_es: 'Spanish (Español)',
-    lang_fr: 'French (Français)',
-    lang_pt: 'Portuguese (Português)',
-    lang_uk: 'Ukrainian (Українська)',
-    lang_tr: 'Turkish (Türkçe)',
-    lang_zh: 'Chinese (中文)',
-    history: 'Історія',
-    delete: 'Видалити',
-    edit: 'Редагувати',
-    branchFromHere: 'Відгалуження звідси',
-    cancel: 'Скасувати',
-    deleteChat: 'Видалити чат',
-    confirmDeleteChat: 'Видалити цей чат?',
-    noChats: 'Ще немає чатів',
-    send: 'Надіслати',
-    webAccess: 'Доступ до вебу',
-    webOn: 'Увімк',
-    webOff: 'Вимк',
-    model: 'Модель',
-    model_quick: 'Швидка — швидка і легка',
-    model_deep: 'Глибока — точна, але важча',
-    nav_ask: 'Запитати ІІ',
-    nav_read: 'Читати',
-    nav_write: 'Писати',
-    comingSoon: 'Незабаром',
-    apiKey: 'API Ключ',
-    setApiKey: 'Вказати API ключ',
-    enterApiKey: 'Введіть ключ OpenAI (починається з sk-)',
-    save: 'Зберегти',
-    clear: 'Очистити',
-    missingKey: 'API ключ не встановлено',
-    read_drop_title: 'Клацніть або перетягніть файли сюди.',
-    read_drop_sub1: 'Підтримувані формати: PDF',
-    read_drop_sub2: 'Максимальний розмір: 10MB.',
-    read_recent: 'Нещодавні файли:',
-    read_view: 'Відкрити',
-    read_delete: 'Видалити',
-    read_chat: 'Чат',
-    read_chat_prompt: 'Коротко перекази цей PDF.',
-    write_compose: 'Написати',
-    write_revise: 'Редагувати',
-    write_grammar: 'Перевірка граматики',
-    write_paraphrase: 'Перефразування',
-    write_format: 'Формат',
-    write_tone: 'Тон',
-    write_length: 'Довжина',
-    write_language: 'Мова',
-    write_generate: 'Згенерувати чернетку',
-    write_ai_optimize: 'AI Оптимізація',
-    write_regenerate: 'Перегенерувати',
-    write_copy: 'Копіювати',
-    write_result: 'Результат',
-    write_compose_placeholder: 'Тема або бриф...',
-    write_revise_placeholder: 'Вставте текст для покращення...',
-    write_grammar_placeholder: 'Вставте текст для перевірки...',
-    write_paraphrase_placeholder: 'Вставте текст для перефразування...',
-    loading: 'Завантаження...',
-    chip_auto: 'Авто',
-    chip_essay: 'Есе',
-    chip_article: 'Стаття',
-    chip_email: 'Лист',
-    chip_message: 'Повідомлення',
-    chip_comment: 'Коментар',
-    chip_blog: 'Блог',
-    chip_formal: 'Формальний',
-    chip_professional: 'Діловий',
-    chip_funny: 'Смішний',
-    chip_casual: 'Неформальний',
-    chip_short: 'Короткий',
-    chip_medium: 'Середній',
-    chip_long: 'Довгий',
-    contact_feature_idea: 'Є ідеї щодо функцій або відгуки?',
-    contact_email_cta: 'Напишіть мені:',
-  },
-  de: {
-    title: 'LLM-Chat',
-    rateUs: 'Bewerten Sie uns',
-    uiOnly: 'Nur UI',
-    toggleTheme: 'Theme umschalten',
-    screenshot: 'Screenshot',
-    screenshot_not_allowed:
-      'Aufgrund technischer Browser-Beschränkungen sind auf dieser Seite keine Screenshots möglich. Bitte machen Sie Screenshots auf normalen Websites.',
-    welcome_title: 'Wobei kann ich Ihnen heute helfen?',
-    welcome_solve_title: 'Studienproblem lösen',
-    welcome_solve_sub: 'Hilf mir, diese Matheaufgabe zu lösen, und gib detaillierte Schritte an',
-    welcome_write_title: 'Einen Aufsatz schreiben',
-    welcome_write_sub: 'Hilf mir, einen 1000-Wörter-Geschichtsaufsatz zu schreiben',
-    welcome_read_title: 'PDF‑Materialien lesen',
-    welcome_read_sub: 'Lies und chatte über PDFs, erhalte Interpretationen und Zusammenfassungen',
-    welcome_shot_title: 'Einen Screenshot machen',
-    welcome_shot_sub: 'Die aktuelle Seite oder einen Bereich zum Diskutieren erfassen',
-    uploadImage: 'Bild hochladen',
-    uploadFile: 'PDF hochladen',
-    newChat: 'Neuer Chat',
-    removeAttachment: 'Anhang entfernen',
-    placeholder: 'Nachricht eingeben... (Enter — senden, Shift+Enter — neue Zeile)',
-    uiNote: 'Nur UI. Keine LLM-Verbindung.',
-    compact: 'Kompaktmodus',
-    langButton: 'Sprache',
-    lang_en: 'English (English)',
-    lang_ru: 'Russian (Русский)',
-    lang_de: 'German (Deutsch)',
-    lang_es: 'Spanish (Español)',
-    lang_fr: 'French (Français)',
-    lang_pt: 'Portuguese (Português)',
-    lang_uk: 'Ukrainian (Українська)',
-    lang_tr: 'Turkish (Türkçe)',
-    lang_zh: 'Chinese (中文)',
-    history: 'Verlauf',
-    delete: 'Löschen',
-    edit: 'Bearbeiten',
-    branchFromHere: 'Ab hier verzweigen',
-    cancel: 'Abbrechen',
-    deleteChat: 'Chat löschen',
-    confirmDeleteChat: 'Diesen Chat löschen?',
-    noChats: 'Noch keine Chats',
-    send: 'Senden',
-    webAccess: 'Webzugriff',
-    webOn: 'An',
-    webOff: 'Aus',
-    model: 'Modell',
-    model_quick: 'Schnell – schnell & leicht',
-    model_deep: 'Tief – präzise & schwer',
-    nav_ask: 'KI fragen',
-    nav_read: 'Lesen',
-    nav_write: 'Schreiben',
-    comingSoon: 'Bald verfügbar',
-    apiKey: 'API-Schlüssel',
-    setApiKey: 'API-Schlüssel setzen',
-    enterApiKey: 'OpenAI API-Schlüssel eingeben (beginnt mit sk-)',
-    save: 'Speichern',
-    clear: 'Leeren',
-    missingKey: 'API-Schlüssel ist nicht gesetzt',
-    read_drop_title: 'Klicken oder Dateien hierher ziehen.',
-    read_drop_sub1: 'Unterstützte Typen: PDF',
-    read_drop_sub2: 'Maximale Größe: 10MB.',
-    read_recent: 'Zuletzt verwendet:',
-    read_view: 'Ansehen',
-    read_delete: 'Löschen',
-    read_chat: 'Chat',
-    read_chat_prompt: 'Fasse dieses PDF zusammen.',
-    write_compose: 'Verfassen',
-    write_revise: 'Überarbeiten',
-    write_grammar: 'Grammatikprüfung',
-    write_paraphrase: 'Paraphrasierer',
-    write_format: 'Format',
-    write_tone: 'Ton',
-    write_length: 'Länge',
-    write_language: 'Sprache',
-    write_generate: 'Entwurf generieren',
-    write_ai_optimize: 'KI optimieren',
-    write_regenerate: 'Neu generieren',
-    write_copy: 'Kopieren',
-    write_result: 'Ergebnis',
-    write_compose_placeholder: 'Thema oder Briefing...',
-    write_revise_placeholder: 'Text zum Verbessern einfügen...',
-    write_grammar_placeholder: 'Text zum Prüfen einfügen...',
-    write_paraphrase_placeholder: 'Text zum Paraphrasieren einfügen...',
-    loading: 'Laden...',
-    chip_auto: 'Auto',
-    chip_essay: 'Essay',
-    chip_article: 'Artikel',
-    chip_email: 'E-Mail',
-    chip_message: 'Nachricht',
-    chip_comment: 'Kommentar',
-    chip_blog: 'Blog',
-    chip_formal: 'Formal',
-    chip_professional: 'Professionell',
-    chip_funny: 'Witzig',
-    chip_casual: 'Locker',
-    chip_short: 'Kurz',
-    chip_medium: 'Mittel',
-    chip_long: 'Lang',
-    contact_feature_idea: 'Haben Sie Funktionsideen oder Feedback?',
-    contact_email_cta: 'Schreiben Sie mir:',
-  },
-  fr: {
-    title: 'LLM Chat',
-    rateUs: 'Notez-nous',
-    uiOnly: 'Interface uniquement',
-    toggleTheme: 'Changer le thème',
-    screenshot: "Capture d'écran",
-    screenshot_not_allowed:
-      "En raison de restrictions techniques du navigateur, les captures d'écran ne sont pas disponibles sur cette page. Veuillez effectuer des captures sur des sites classiques.",
-    welcome_title: "Comment puis-je vous aider aujourd'hui ?",
-    welcome_solve_title: "Résoudre un problème d'étude",
-    welcome_solve_sub: 'Aidez-moi à résoudre cet exercice de maths avec des étapes détaillées',
-    welcome_write_title: 'Rédiger un essai',
-    welcome_write_sub: "Aidez-moi à rédiger un essai d'histoire de 1000 mots",
-    welcome_read_title: 'Lire des documents PDF',
-    welcome_read_sub: "Lire et discuter d'un PDF, obtenir des interprétations et des résumés",
-    welcome_shot_title: "Faire une capture d'écran",
-    welcome_shot_sub: 'Capturer la page actuelle ou une zone à discuter',
-    uploadImage: 'Téléverser une image',
-    uploadFile: 'Téléverser un PDF',
-    newChat: 'Nouvelle conversation',
-    removeAttachment: 'Supprimer la pièce jointe',
-    placeholder: 'Saisissez un message... (Entrée — envoyer, Maj+Entrée — nouvelle ligne)',
-    uiNote: 'Interface uniquement. Pas de connexion LLM.',
-    compact: 'Mode compact',
-    langButton: 'Langue',
-    lang_en: 'English (English)',
-    lang_ru: 'Russian (Русский)',
-    lang_de: 'German (Deutsch)',
-    lang_es: 'Spanish (Español)',
-    lang_fr: 'French (Français)',
-    lang_pt: 'Portuguese (Português)',
-    lang_uk: 'Ukrainian (Українська)',
-    lang_tr: 'Turkish (Türkçe)',
-    lang_zh: 'Chinese (中文)',
-    history: 'Historique',
-    delete: 'Supprimer',
-    edit: 'Modifier',
-    branchFromHere: 'Créer une branche ici',
-    cancel: 'Annuler',
-    deleteChat: 'Supprimer la conversation',
-    confirmDeleteChat: 'Supprimer cette conversation ?',
-    noChats: 'Aucune conversation',
-    send: 'Envoyer',
-    webAccess: 'Accès Web',
-    webOn: 'Activé',
-    webOff: 'Désactivé',
-    model: 'Modèle',
-    model_quick: 'Rapide — rapide et léger',
-    model_deep: 'Précis — précis et lourd',
-    nav_ask: "Demander à l'IA",
-    nav_read: 'Lire',
-    nav_write: 'Écrire',
-    comingSoon: 'Bientôt disponible',
-    apiKey: 'Clé API',
-    setApiKey: 'Définir la clé API',
-    enterApiKey: 'Entrez la clé OpenAI (commence par sk-)',
-    save: 'Enregistrer',
-    clear: 'Effacer',
-    missingKey: "La clé API n'est pas définie",
-    read_drop_title: 'Cliquez ou déposez des fichiers ici.',
-    read_drop_sub1: 'Types pris en charge : PDF',
-    read_drop_sub2: 'Taille maximale : 10 Mo.',
-    read_recent: 'Fichiers récents :',
-    read_view: 'Ouvrir',
-    read_delete: 'Supprimer',
-    read_chat: 'Chat',
-    read_chat_prompt: 'Résumez ce PDF.',
-    write_compose: 'Composer',
-    write_revise: 'Réviser',
-    write_grammar: 'Vérifier la grammaire',
-    write_paraphrase: 'Paraphraser',
-    write_format: 'Format',
-    write_tone: 'Ton',
-    write_length: 'Longueur',
-    write_language: 'Langue',
-    write_generate: 'Générer un brouillon',
-    write_ai_optimize: 'Optimisation IA',
-    write_regenerate: 'Régénérer',
-    write_copy: 'Copier',
-    write_result: 'Résultat',
-    write_compose_placeholder: 'Sujet ou brief...',
-    write_revise_placeholder: 'Collez le texte à améliorer...',
-    write_grammar_placeholder: 'Collez le texte à vérifier...',
-    write_paraphrase_placeholder: 'Collez le texte à paraphraser...',
-    loading: 'Chargement...',
-    chip_auto: 'Auto',
-    chip_essay: 'Essai',
-    chip_article: 'Article',
-    chip_email: 'E-mail',
-    chip_message: 'Message',
-    chip_comment: 'Commentaire',
-    chip_blog: 'Blog',
-    chip_formal: 'Formel',
-    chip_professional: 'Professionnel',
-    chip_funny: 'Humoristique',
-    chip_casual: 'Décontracté',
-    chip_short: 'Court',
-    chip_medium: 'Moyen',
-    chip_long: 'Long',
-    contact_feature_idea: 'Des idées de fonctionnalités ou des retours ?',
-    contact_email_cta: 'Écrivez-moi :',
-  },
-  es: {
-    title: 'Chat LLM',
-    rateUs: 'Califícanos',
-    uiOnly: 'Solo IU',
-    toggleTheme: 'Cambiar tema',
-    screenshot: 'Captura de pantalla',
-    screenshot_not_allowed:
-      'Debido a restricciones técnicas del navegador, no se pueden hacer capturas en esta página. Por favor, realiza capturas en sitios web normales.',
-    welcome_title: '¿Cómo puedo ayudarte hoy?',
-    welcome_solve_title: 'Resolver un problema de estudio',
-    welcome_solve_sub: 'Ayúdame a resolver esta pregunta de matemáticas y proporciona pasos detallados',
-    welcome_write_title: 'Escribir un ensayo',
-    welcome_write_sub: 'Ayúdame a escribir un ensayo de historia de 1000 palabras',
-    welcome_read_title: 'Leer materiales PDF',
-    welcome_read_sub: 'Lee y conversa sobre el PDF, obtén interpretaciones y resúmenes',
-    welcome_shot_title: 'Tomar una captura de pantalla',
-    welcome_shot_sub: 'Capturar la página actual o un área para discutir',
-    uploadImage: 'Subir imagen',
-    uploadFile: 'Subir PDF',
-    newChat: 'Nuevo chat',
-    removeAttachment: 'Eliminar adjunto',
-    placeholder: 'Escribe un mensaje... (Enter — enviar, Shift+Enter — nueva línea)',
-    uiNote: 'Solo IU. Sin conexión LLM.',
-    compact: 'Modo compacto',
-    langButton: 'Idioma',
-    lang_en: 'English (English)',
-    lang_ru: 'Russian (Русский)',
-    lang_de: 'German (Deutsch)',
-    lang_es: 'Spanish (Español)',
-    lang_fr: 'French (Français)',
-    lang_pt: 'Portuguese (Português)',
-    lang_uk: 'Ukrainian (Українська)',
-    lang_tr: 'Turkish (Türkçe)',
-    lang_zh: 'Chinese (中文)',
-    history: 'Historial',
-    delete: 'Eliminar',
-    edit: 'Editar',
-    branchFromHere: 'Rama desde aquí',
-    cancel: 'Cancelar',
-    deleteChat: 'Eliminar chat',
-    confirmDeleteChat: '¿Eliminar este chat?',
-    noChats: 'No hay chats aún',
-    send: 'Enviar',
-    webAccess: 'Acceso web',
-    webOn: 'Activado',
-    webOff: 'Desactivado',
-    model: 'Modelo',
-    model_quick: 'Rápido — rápido y ligero',
-    model_deep: 'Profundo — preciso y pesado',
-    nav_ask: 'Preguntar a la IA',
-    nav_read: 'Leer',
-    nav_write: 'Escribir',
-    comingSoon: 'Próximamente',
-    apiKey: 'Clave API',
-    setApiKey: 'Establecer clave API',
-    enterApiKey: 'Introduce la clave de OpenAI (empieza con sk-)',
-    save: 'Guardar',
-    clear: 'Borrar',
-    missingKey: 'La clave API no está establecida',
-    read_drop_title: 'Haz clic o arrastra archivos aquí.',
-    read_drop_sub1: 'Tipos admitidos: PDF',
-    read_drop_sub2: 'Tamaño máximo: 10MB.',
-    read_recent: 'Archivos recientes:',
-    read_view: 'Ver',
-    read_delete: 'Eliminar',
-    read_chat: 'Chat',
-    read_chat_prompt: 'Resume este PDF.',
-    write_compose: 'Redactar',
-    write_revise: 'Revisar',
-    write_grammar: 'Revisión gramatical',
-    write_paraphrase: 'Parafrasear',
-    write_format: 'Formato',
-    write_tone: 'Tono',
-    write_length: 'Longitud',
-    write_language: 'Idioma',
-    write_generate: 'Generar borrador',
-    write_ai_optimize: 'Optimización IA',
-    write_regenerate: 'Regenerar',
-    write_copy: 'Copiar',
-    write_result: 'Resultado',
-    write_compose_placeholder: 'Tema o briefing...',
-    write_revise_placeholder: 'Pega el texto a mejorar...',
-    write_grammar_placeholder: 'Pega el texto a comprobar...',
-    write_paraphrase_placeholder: 'Pega el texto a parafrasear...',
-    loading: 'Cargando...',
-    chip_auto: 'Auto',
-    chip_essay: 'Ensayo',
-    chip_article: 'Artículo',
-    chip_email: 'Correo',
-    chip_message: 'Mensaje',
-    chip_comment: 'Comentario',
-    chip_blog: 'Blog',
-    chip_formal: 'Formal',
-    chip_professional: 'Profesional',
-    chip_funny: 'Divertido',
-    chip_casual: 'Informal',
-    chip_short: 'Corto',
-    chip_medium: 'Medio',
-    chip_long: 'Largo',
-    contact_feature_idea: '¿Tienes ideas de funciones o comentarios?',
-    contact_email_cta: 'Escríbeme:',
-  },
-  pt: {
-    title: 'Bate-papo LLM',
-    rateUs: 'Avalie-nos',
-    uiOnly: 'Somente UI',
-    toggleTheme: 'Alternar tema',
-    screenshot: 'Captura de tela',
-    screenshot_not_allowed:
-      'Devido a restrições técnicas do navegador, não é possível fazer capturas nesta página. Faça capturas em sites comuns.',
-    welcome_title: 'Como posso ajudar você hoje?',
-    welcome_solve_title: 'Resolver problema de estudo',
-    welcome_solve_sub: 'Ajude-me a resolver esta questão de matemática e forneça passos detalhados',
-    welcome_write_title: 'Escrever um ensaio',
-    welcome_write_sub: 'Ajude-me a escrever um ensaio de história de 1000 palavras',
-    welcome_read_title: 'Ler materiais em PDF',
-    welcome_read_sub: 'Ler e conversar sobre o PDF, obter interpretações e resumos',
-    welcome_shot_title: 'Fazer uma captura de tela',
-    welcome_shot_sub: 'Capturar a página atual ou uma área para discutir',
-    uploadImage: 'Enviar imagem',
-    uploadFile: 'Enviar PDF',
-    newChat: 'Novo chat',
-    removeAttachment: 'Remover anexo',
-    placeholder: 'Digite uma mensagem... (Enter — enviar, Shift+Enter — nova linha)',
-    uiNote: 'Somente UI. Sem conexão LLM.',
-    compact: 'Modo compacto',
-    langButton: 'Idioma',
-    lang_en: 'English (English)',
-    lang_ru: 'Russian (Русский)',
-    lang_de: 'German (Deutsch)',
-    lang_es: 'Spanish (Español)',
-    lang_fr: 'French (Français)',
-    lang_pt: 'Portuguese (Português)',
-    lang_uk: 'Ukrainian (Українська)',
-    lang_tr: 'Turkish (Türkçe)',
-    lang_zh: 'Chinese (中文)',
-    history: 'Histórico',
-    delete: 'Excluir',
-    edit: 'Editar',
-    branchFromHere: 'Ramificar a partir daqui',
-    cancel: 'Cancelar',
-    deleteChat: 'Excluir chat',
-    confirmDeleteChat: 'Excluir este chat?',
-    noChats: 'Ainda não há chats',
-    send: 'Enviar',
-    webAccess: 'Acesso à Web',
-    webOn: 'Ativado',
-    webOff: 'Desativado',
-    model: 'Modelo',
-    model_quick: 'Rápido — rápido e leve',
-    model_deep: 'Profundo — preciso e pesado',
-    nav_ask: 'Perguntar à IA',
-    nav_read: 'Ler',
-    nav_write: 'Escrever',
-    comingSoon: 'Em breve',
-    apiKey: 'Chave da API',
-    setApiKey: 'Definir chave da API',
-    enterApiKey: 'Insira a chave OpenAI (começa com sk-)',
-    save: 'Salvar',
-    clear: 'Limpar',
-    missingKey: 'Chave da API não definida',
-    read_drop_title: 'Clique ou arraste arquivos aqui.',
-    read_drop_sub1: 'Tipos suportados: PDF',
-    read_drop_sub2: 'Tamanho máximo: 10MB.',
-    read_recent: 'Arquivos recentes:',
-    read_view: 'Ver',
-    read_delete: 'Excluir',
-    read_chat: 'Bate-papo',
-    read_chat_prompt: 'Resuma este PDF.',
-    write_compose: 'Redigir',
-    write_revise: 'Revisar',
-    write_grammar: 'Verificação gramatical',
-    write_paraphrase: 'Parafrasear',
-    write_format: 'Formato',
-    write_tone: 'Tom',
-    write_length: 'Comprimento',
-    write_language: 'Idioma',
-    write_generate: 'Gerar rascunho',
-    write_ai_optimize: 'Otimização por IA',
-    write_regenerate: 'Regenerar',
-    write_copy: 'Copiar',
-    write_result: 'Resultado',
-    write_compose_placeholder: 'Tópico ou briefing...',
-    write_revise_placeholder: 'Cole o texto para melhorar...',
-    write_grammar_placeholder: 'Cole o texto para verificar...',
-    write_paraphrase_placeholder: 'Cole o texto para parafrasear...',
-    loading: 'Carregando...',
-    chip_auto: 'Auto',
-    chip_essay: 'Ensaio',
-    chip_article: 'Artigo',
-    chip_email: 'Email',
-    chip_message: 'Mensagem',
-    chip_comment: 'Comentário',
-    chip_blog: 'Blog',
-    chip_formal: 'Formal',
-    chip_professional: 'Profissional',
-    chip_funny: 'Engraçado',
-    chip_casual: 'Informal',
-    chip_short: 'Curto',
-    chip_medium: 'Médio',
-    chip_long: 'Longo',
-    contact_feature_idea: 'Tem ideias de funcionalidades ou feedback?',
-    contact_email_cta: 'Envie-me um e-mail:',
-  },
-  tr: {
-    title: 'LLM Sohbet',
-    rateUs: 'Bizi değerlendirin',
-    uiOnly: 'Yalnızca arayüz',
-    toggleTheme: 'Temayı değiştir',
-    screenshot: 'Ekran görüntüsü',
-    screenshot_not_allowed:
-      'Tarayıcıdaki teknik kısıtlamalar nedeniyle bu sayfada ekran görüntüsü alınamaz. Lütfen normal sitelerde ekran görüntüsü alın.',
-    welcome_title: 'Bugün size nasıl yardımcı olabilirim?',
-    welcome_solve_title: 'Çalışma problemini çöz',
-    welcome_solve_sub: 'Bu matematik sorusunu çözmeme yardım et ve ayrıntılı adımlar ver',
-    welcome_write_title: 'Bir deneme yaz',
-    welcome_write_sub: '1000 kelimelik bir tarih denemesi yazmama yardımcı ol',
-    welcome_read_title: 'PDF materyallerini oku',
-    welcome_read_sub: "PDF'i oku ve sohbet et, yorumlar ve özetler elde et",
-    welcome_shot_title: 'Ekran görüntüsü al',
-    welcome_shot_sub: 'Tartışmak için mevcut sayfayı veya bir alanı yakala',
-    uploadImage: 'Görüntü yükle',
-    uploadFile: 'PDF yükle',
-    newChat: 'Yeni sohbet',
-    removeAttachment: 'Eki kaldır',
-    placeholder: 'Mesaj yazın... (Enter — gönder, Shift+Enter — yeni satır)',
-    uiNote: 'Yalnızca arayüz. LLM bağlantısı yok.',
-    compact: 'Kompakt mod',
-    langButton: 'Dil',
-    lang_en: 'English (English)',
-    lang_ru: 'Russian (Русский)',
-    lang_de: 'German (Deutsch)',
-    lang_es: 'Spanish (Español)',
-    lang_fr: 'French (Français)',
-    lang_pt: 'Portuguese (Português)',
-    lang_uk: 'Ukrainian (Українська)',
-    lang_tr: 'Turkish (Türkçe)',
-    lang_zh: 'Chinese (中文)',
-    history: 'Geçmiş',
-    delete: 'Sil',
-    edit: 'Düzenle',
-    branchFromHere: 'Buradan dallan',
-    cancel: 'İptal',
-    deleteChat: 'Sohbeti sil',
-    confirmDeleteChat: 'Bu sohbet silinsin mi?',
-    noChats: 'Henüz sohbet yok',
-    send: 'Gönder',
-    webAccess: 'Web Erişimi',
-    webOn: 'Açık',
-    webOff: 'Kapalı',
-    model: 'Model',
-    model_quick: 'Hızlı — hızlı ve hafif',
-    model_deep: 'Derin — doğru ve ağır',
-    nav_ask: "YZ'ye sor",
-    nav_read: 'Oku',
-    nav_write: 'Yaz',
-    comingSoon: 'Yakında',
-    apiKey: 'API Anahtarı',
-    setApiKey: 'API Anahtarını ayarla',
-    enterApiKey: 'OpenAI API anahtarını girin (sk- ile başlar)',
-    save: 'Kaydet',
-    clear: 'Temizle',
-    missingKey: 'API anahtarı ayarlanmadı',
-    read_drop_title: 'Dosyaları yüklemek için tıklayın veya sürükleyin.',
-    read_drop_sub1: 'Desteklenen türler: PDF',
-    read_drop_sub2: 'Maksimum boyut: 10MB.',
-    read_recent: 'Son dosyalar:',
-    read_view: 'Görüntüle',
-    read_delete: 'Sil',
-    read_chat: 'Sohbet',
-    read_chat_prompt: "Bu PDF'yi özetle.",
-    write_compose: 'Yaz',
-    write_revise: 'Gözden geçir',
-    write_grammar: 'Dil bilgisi kontrolü',
-    write_paraphrase: 'Parafraz',
-    write_format: 'Biçim',
-    write_tone: 'Ton',
-    write_length: 'Uzunluk',
-    write_language: 'Dil',
-    write_generate: 'Taslak oluştur',
-    write_ai_optimize: 'YZ ile optimize et',
-    write_regenerate: 'Yeniden oluştur',
-    write_copy: 'Kopyala',
-    write_result: 'Sonuç',
-    write_compose_placeholder: 'Konu veya özet...',
-    write_revise_placeholder: 'İyileştirilecek metni yapıştırın...',
-    write_grammar_placeholder: 'Kontrol edilecek metni yapıştırın...',
-    write_paraphrase_placeholder: 'Parafraz edilecek metni yapıştırın...',
-    loading: 'Yükleniyor...',
-    chip_auto: 'Otomatik',
-    chip_essay: 'Deneme',
-    chip_article: 'Makale',
-    chip_email: 'E-posta',
-    chip_message: 'Mesaj',
-    chip_comment: 'Yorum',
-    chip_blog: 'Blog',
-    chip_formal: 'Resmi',
-    chip_professional: 'Profesyonel',
-    chip_funny: 'Komik',
-    chip_casual: 'Samimi',
-    chip_short: 'Kısa',
-    chip_medium: 'Orta',
-    chip_long: 'Uzun',
-    contact_feature_idea: 'Özellik fikirleriniz veya geri bildiriminiz var mı?',
-    contact_email_cta: 'Bana e-posta gönderin:',
-  },
-  zh: {
-    title: 'LLM 聊天',
-    rateUs: '为我们评分',
-    uiOnly: '仅界面',
-    toggleTheme: '切换主题',
-    screenshot: '屏幕截图',
-    screenshot_not_allowed: '由于浏览器的技术限制，此页面无法进行截图。请在普通网站上进行截图。',
-    welcome_title: '我今天可以如何帮助你？',
-    welcome_solve_title: '解决学习问题',
-    welcome_solve_sub: '帮我解答这道数学题，并提供详细步骤',
-    welcome_write_title: '写一篇作文',
-    welcome_write_sub: '帮我写一篇1000字的历史作文',
-    welcome_read_title: '阅读 PDF 资料',
-    welcome_read_sub: '阅读并与 PDF 聊天，获取文章解读和摘要',
-    welcome_shot_title: '截取屏幕',
-    welcome_shot_sub: '捕获当前页面或选定区域进行讨论',
-    uploadImage: '上传图片',
-    uploadFile: '上传 PDF',
-    newChat: '新建聊天',
-    removeAttachment: '移除附件',
-    placeholder: '输入消息…（回车发送，Shift+回车换行）',
-    uiNote: '仅界面。未连接 LLM。',
-    compact: '紧凑模式',
-    langButton: '语言',
-    lang_en: 'English (English)',
-    lang_ru: 'Russian (Русский)',
-    lang_de: 'German (Deutsch)',
-    lang_es: 'Spanish (Español)',
-    lang_fr: 'French (Français)',
-    lang_pt: 'Portuguese (Português)',
-    lang_uk: 'Ukrainian (Українська)',
-    lang_tr: 'Turkish (Türkçe)',
-    lang_zh: 'Chinese (中文)',
-    history: '历史',
-    delete: '删除',
-    edit: '编辑',
-    branchFromHere: '从这里分支',
-    cancel: '取消',
-    deleteChat: '删除聊天',
-    confirmDeleteChat: '删除此聊天？',
-    noChats: '暂无聊天',
-    send: '发送',
-    webAccess: '网络访问',
-    webOn: '开',
-    webOff: '关',
-    model: '模型',
-    model_quick: '快速 — 快速轻量',
-    model_deep: '深度 — 精准但较重',
-    nav_ask: '询问 AI',
-    nav_read: '阅读',
-    nav_write: '写作',
-    comingSoon: '即将推出',
-    apiKey: 'API 密钥',
-    setApiKey: '设置 API 密钥',
-    enterApiKey: '输入 OpenAI API 密钥（以 sk- 开头）',
-    save: '保存',
-    clear: '清除',
-    missingKey: '未设置 API 密钥',
-    read_drop_title: '点击或拖拽文件到此处上传。',
-    read_drop_sub1: '支持的文件类型：PDF',
-    read_drop_sub2: '最大文件大小：10MB。',
-    read_recent: '最近的文件：',
-    read_view: '查看',
-    read_delete: '删除',
-    read_chat: '聊天',
-    read_chat_prompt: '总结此 PDF。',
-    write_compose: '撰写',
-    write_revise: '润色',
-    write_grammar: '语法检查',
-    write_paraphrase: '释义',
-    write_format: '格式',
-    write_tone: '语气',
-    write_length: '长度',
-    write_language: '语言',
-    write_generate: '生成草稿',
-    contact_feature_idea: '有功能想法或反馈吗？',
-    contact_email_cta: '给我发邮件：',
-    write_ai_optimize: 'AI 优化',
-    write_regenerate: '重新生成',
-    write_copy: '复制',
-    write_result: '结果',
-    write_compose_placeholder: '主题或简要…',
-    write_revise_placeholder: '粘贴要改进的文本…',
-    write_grammar_placeholder: '粘贴要检查的文本…',
-    write_paraphrase_placeholder: '粘贴要释义的文本…',
-    loading: '加载中…',
-    chip_auto: '自动',
-    chip_essay: '论文',
-    chip_article: '文章',
-    chip_email: '邮件',
-    chip_message: '消息',
-    chip_comment: '评论',
-    chip_blog: '博客',
-    chip_formal: '正式',
-    chip_professional: '专业',
-    chip_funny: '有趣',
-    chip_casual: '随意',
-    chip_short: '短',
-    chip_medium: '中',
-    chip_long: '长',
-  },
-} as const;
 
 type ChatMessage =
   | { id: string; role: 'user' | 'assistant'; type: 'text'; content: string; batchId?: string; noRender?: boolean }
@@ -1361,7 +444,6 @@ const SidePanel = () => {
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
 
-  type UILocale = 'en' | 'ru' | 'de' | 'es' | 'fr' | 'pt' | 'uk' | 'tr' | 'zh';
   const [uiLocale, setUiLocale] = useState<UILocale>('en');
   const [langOpen, setLangOpen] = useState<boolean>(false);
   const [compactMode, setCompactMode] = useState<boolean>(false);
@@ -1412,23 +494,24 @@ const SidePanel = () => {
   const [writeParaphraseInput, setWriteParaphraseInput] = useState<string>('');
   const [writeParaphraseResult, setWriteParaphraseResult] = useState<string>('');
   const [writeLangOpen, setWriteLangOpen] = useState<boolean>(false);
-  const [subject, setSubject] = useState<string>('Auto detection');
+  const t = (UI_I18N as unknown as Record<UILocale, (typeof UI_I18N)['en']>)[uiLocale] ?? UI_I18N.en;
+  const [subject, setSubject] = useState<string>('auto');
   const subjects = [
-    'Auto detection',
-    'Math',
-    'Social Studies',
-    'Language',
-    'Science',
-    'History',
-    'Economics',
-    'Music',
-    'Physics',
-    'Chemistry',
-    'Biology',
-    'Art',
-    'Geography',
-    'Computer Science',
-  ];
+    'auto',
+    'math',
+    'social',
+    'lang',
+    'science',
+    'history',
+    'econ',
+    'music',
+    'phys',
+    'chem',
+    'bio',
+    'art',
+    'geo',
+    'cs',
+  ] as const;
 
   const [isComposeStreaming, setIsComposeStreaming] = useState<boolean>(false);
   const [toolsMenuOpen, setToolsMenuOpen] = useState<boolean>(false);
@@ -1463,7 +546,6 @@ const SidePanel = () => {
   // Flag to auto-send first screenshot taken from the welcome screen
   const autoSendAfterScreenshotRef = useRef<boolean>(false);
 
-  const t = (UI_I18N as unknown as Record<UILocale, (typeof UI_I18N)['en']>)[uiLocale] ?? UI_I18N.en;
   const langLabelKeyByCode: Record<UILocale, keyof (typeof UI_I18N)['en']> = {
     en: 'lang_en',
     ru: 'lang_ru',
@@ -1570,30 +652,6 @@ const SidePanel = () => {
         content: 'Generate and refine text: drafts, grammar checks, and paraphrasing.',
       },
       {
-        id: 'model',
-        selector: '[data-tour-id="model"]',
-        title: 'Model',
-        content: 'Choose between Quick (faster) and Deep (more accurate for complex tasks).',
-      },
-      {
-        id: 'web-access',
-        selector: '[data-tour-id="web-access"]',
-        title: 'Web access',
-        content: 'Enable when you want the assistant to search the web while answering.',
-      },
-      {
-        id: 'new-chat',
-        selector: '[data-tour-id="new-chat"]',
-        title: 'New chat',
-        content: 'Start a separate conversation to keep topics organized.',
-      },
-      {
-        id: 'upload-file',
-        selector: '[data-tour-id="upload-file"]',
-        title: 'Upload PDF',
-        content: 'Attach a PDF file for reading and discussion.',
-      },
-      {
         id: 'send',
         selector: '[data-tour-id="send"]',
         title: 'Send message',
@@ -1619,7 +677,18 @@ const SidePanel = () => {
       .then(store => {
         const v = store?.uiLocale as UILocale | undefined;
         const allowed: UILocale[] = ['en', 'ru', 'de', 'es', 'fr', 'pt', 'uk', 'tr', 'zh'];
-        const selected: UILocale = allowed.includes(v as UILocale) ? (v as UILocale) : 'en';
+
+        let defaultLocale: UILocale = 'en';
+        try {
+          const browserLang = chrome.i18n.getUILanguage().split('-')[0] as UILocale;
+          if (allowed.includes(browserLang)) {
+            defaultLocale = browserLang;
+          }
+        } catch {
+          // ignore
+        }
+
+        const selected: UILocale = allowed.includes(v as UILocale) ? (v as UILocale) : defaultLocale;
         const localeForInit: 'en' | 'ru' = selected === 'ru' ? 'ru' : 'en';
         setUiLocale(selected);
 
@@ -1750,9 +819,7 @@ const SidePanel = () => {
         const images = group.filter(isImageMessage);
         const text =
           textItem?.content ||
-          (uiLocale === 'ru'
-            ? 'Если во вложенных изображениях (скриншотах) есть вопрос или задание — ответь или реши его. Иначе кратко опиши вложения.'
-            : 'If the attachments (screenshots) contain a question or task, answer or solve it; otherwise briefly describe the attachments.');
+          UI_I18N[uiLocale].image_prompt_task;
         const imageParts = images.map(img => ({ type: 'input_image', image_url: img.dataUrl }));
         items.push({ role: 'user', content: [{ type: 'input_text', text }, ...imageParts] });
         i = start - 1;
@@ -1843,8 +910,7 @@ const SidePanel = () => {
         );
       } catch (e) {
         console.error('[CEB][SidePanel] File upload error', e);
-        const msgText =
-          uiLocale === 'ru' ? 'Не удалось загрузить файл(ы) в OpenAI.' : 'Failed to upload file(s) to OpenAI.';
+        const msgText = UI_I18N[uiLocale].upload_error;
         // Update the placeholder with error text
         setMessages(prev => prev.map(m => (m.id === streamId && m.type === 'text' ? { ...m, content: msgText } : m)));
         upsertActiveThread(thread => ({
@@ -3550,6 +2616,24 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
               <TooltipContent side="bottom">{t.toggleTheme}</TooltipContent>
             </Tooltip>
 
+            {/* History */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <IconButton
+                  onClick={() => setHistorySheetOpen(true)}
+                  ariaLabel={t.history}
+                  className={cn(
+                    'mt-0 text-lg',
+                    isLight
+                      ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
+                      : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
+                  )}>
+                  <History aria-hidden="true" className="h-5 w-5" />
+                </IconButton>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">{t.history}</TooltipContent>
+            </Tooltip>
+
             {/* Controls: compact, language */}
             <div
               className="relative"
@@ -3558,16 +2642,18 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
               }}>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <IconButton
+                  <button
                     onClick={() => setLangOpen(v => !v)}
-                    ariaLabel={t.langButton}
                     className={cn(
+                      'flex h-8 items-center gap-2 rounded-md border px-2 text-sm transition-colors',
                       isLight
                         ? 'border-slate-300 bg-white text-gray-900 hover:bg-slate-50'
                         : 'border-slate-600 bg-slate-700 text-gray-100 hover:bg-slate-600',
-                    )}>
-                    <img src="icons/globe.svg" alt="" aria-hidden="true" className="h-5 w-5" />
-                  </IconButton>
+                    )}
+                    aria-label={t.langButton}>
+                    <img src="icons/globe.svg" alt="" aria-hidden="true" className="h-4 w-4" />
+                    <span className="text-xs font-bold">{uiLocale.toUpperCase()}</span>
+                  </button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">{t.langButton}</TooltipContent>
               </Tooltip>
@@ -3680,31 +2766,31 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                   <div className="flex flex-1 flex-col overflow-y-auto px-4 py-6">
                     {/* Subject Section */}
                     <div className="mb-6 text-center">
-                      <div className="mb-3 text-lg font-medium text-gray-500 dark:text-gray-400">Subject</div>
+                      <div className="mb-3 text-lg font-medium text-gray-500 dark:text-gray-400">{t.welcome_subject}</div>
                       <div className="flex flex-wrap justify-center gap-2">
-                        {subjects.map(sub => (
-                      <button
-                            key={sub}
-                            onClick={() => setSubject(sub)}
-                        className={cn(
+                        {subjects.map(subKey => (
+                          <button
+                            key={subKey}
+                            onClick={() => setSubject(subKey)}
+                            className={cn(
                               'rounded-full px-4 py-1.5 text-sm transition-colors border',
-                              subject === sub
+                              subject === subKey
                                 ? 'bg-violet-600 text-white border-violet-600'
                                 : isLight
                                   ? 'bg-transparent text-gray-600 border-gray-300 hover:border-gray-400'
-                                  : 'bg-transparent text-gray-300 border-gray-600 hover:border-gray-500'
-                            )}
-                          >
-                            {sub}
-                      </button>
+                                  : 'bg-transparent text-gray-300 border-gray-600 hover:border-gray-500',
+                            )}>
+                            {t[`subj_${subKey}` as keyof typeof t]}
+                          </button>
                         ))}
-                            </div>
-                          </div>
+                      </div>
+                    </div>
 
                     {/* Question Section */}
                     <div className="mb-6 text-center">
-                      <div className="mb-3 text-lg font-medium text-gray-500 dark:text-gray-400">Question</div>
+                      <div className="mb-3 text-lg font-medium text-gray-500 dark:text-gray-400">{t.welcome_question}</div>
                       <button
+                        data-tour-id="screenshot"
                         onClick={handleWelcomeScreenshot}
                         className={cn(
                           'w-full rounded-full py-4 flex items-center justify-center gap-2 text-lg font-semibold shadow-lg transition-transform active:scale-[0.98]',
@@ -3748,10 +2834,11 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                               }
                             }
                           }}
-                          placeholder="Type your question here..."
+                          placeholder={t.welcome_placeholder}
                           className="flex-1 bg-transparent outline-none"
                         />
                         <button
+                          data-tour-id="send"
                           onClick={handleSend}
                           disabled={!input.trim()}
                           className={cn(
@@ -5048,10 +4135,6 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                       <button onClick={() => { onClickUploadFile(); setToolsMenuOpen(false); }} className={cn("flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10 text-left")}>
                          <span className="w-5 text-center text-lg leading-none">📄</span> {t.uploadFile}
                     </button>
-                      {/* History */}
-                       <button onClick={() => { setHistorySheetOpen(true); setToolsMenuOpen(false); }} className={cn("flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10 text-left")}>
-                         <span className="w-5 text-center text-lg leading-none">🕒</span> {t.history}
-                    </button>
                       <div className="my-1 border-t border-black/10 dark:border-white/10" />
                       {/* Web Access Toggle */}
                       <button onClick={() => setWebAccessEnabled(v => !v)} className={cn("flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10 text-left")}>
@@ -5287,27 +4370,37 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
                 sortedThreads.map(th => (
                   <div
                     key={th.id}
-                    className={cn(
-                      'flex w-full items-center gap-2 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700',
-                      activeId === th.id ? 'font-semibold' : undefined,
-                    )}>
-                    <button
-                      onClick={() => {
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
                         activateThread(th.id);
                         setHistorySheetOpen(false);
-                      }}
-                      className="flex min-w-0 flex-1 items-start gap-2 text-left">
+                      }
+                    }}
+                    onClick={() => {
+                      activateThread(th.id);
+                      setHistorySheetOpen(false);
+                    }}
+                    className={cn(
+                      'flex w-full cursor-pointer items-center gap-2 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700',
+                      activeId === th.id ? 'font-semibold' : undefined,
+                    )}>
+                    <div className="flex min-w-0 flex-1 items-start gap-2 text-left">
                       <div className="flex-1 truncate">
                         <div className="truncate">{th.title || (uiLocale === 'ru' ? 'Без названия' : 'Untitled')}</div>
                       </div>
                       <div className="ml-2 whitespace-nowrap text-xs opacity-70">
                         {new Date(th.updatedAt).toLocaleString()}
                       </div>
-                    </button>
+                    </div>
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <button
-                          onClick={() => deleteThread(th.id)}
+                          onClick={e => {
+                            e.stopPropagation();
+                            deleteThread(th.id);
+                          }}
                           className={cn(
                             'rounded-md p-1 text-gray-400 transition-colors',
                             isLight ? 'hover:bg-slate-200 hover:text-red-600' : 'hover:bg-slate-700 hover:text-red-600',
