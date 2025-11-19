@@ -2,6 +2,11 @@ import { createRoot } from 'react-dom/client';
 import type { ReactElement } from 'react';
 
 export const initAppWithShadow = ({ id, app, inlineCss }: { id: string; inlineCss: string; app: ReactElement }) => {
+  const existingRoot = document.getElementById(id);
+  if (existingRoot) {
+    existingRoot.remove();
+  }
+
   const root = document.createElement('div');
   root.id = id;
 
