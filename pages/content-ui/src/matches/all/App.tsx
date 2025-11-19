@@ -3,12 +3,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 const LOG_PREFIX = '[CEB][FloatingButton]';
 
 export default function App() {
-  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const buttonRef = useRef<HTMLDivElement | null>(null);
   const isDraggingRef = useRef<boolean>(false);
   const didMoveRef = useRef<boolean>(false);
   const suppressClickRef = useRef<boolean>(false);
   const dragStartPointerYRef = useRef<number>(0);
   const dragStartTopRef = useRef<number>(0);
+  const autoSendRef = useRef<boolean>(false);
   const [buttonTop, setButtonTop] = useState<number>(() => Math.max(80, Math.round(window.innerHeight / 2 - 32)));
   const [hidden, setHidden] = useState<boolean>(false);
   const [iconUrl] = useState<string>(() => {
@@ -137,15 +138,64 @@ export default function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Drag handling via window listeners to avoid pointer capture click issues
+  useEffect(() => {
+    const onWindowPointerMove = (event: PointerEvent) => {
+      if (!isDraggingRef.current) return;
+      
+      const buttonHeight = 64; // Approx height
+      const deltaY = event.clientY - dragStartPointerYRef.current;
+      const nextTopUnbounded = dragStartTopRef.current + deltaY;
+      const minTop = 0;
+      const maxTop = Math.max(0, window.innerHeight - buttonHeight);
+      const clamped = Math.min(Math.max(minTop, nextTopUnbounded), maxTop);
+
+      if (Math.abs(deltaY) > 2) {
+        didMoveRef.current = true;
+        suppressClickRef.current = true;
+      }
+      setButtonTop(clamped);
+    };
+
+    const onWindowPointerUp = (event: PointerEvent) => {
+      if (!isDraggingRef.current) return;
+      
+      isDraggingRef.current = false;
+      // Delay clearing suppressClickRef slightly to ensure onClick fires and sees it
+      setTimeout(() => {
+        suppressClickRef.current = false;
+        didMoveRef.current = false;
+      }, 50);
+      
+      console.debug(`${LOG_PREFIX} pointerEnd (window)`, {
+        finalTop: buttonTop,
+        suppressed: suppressClickRef.current,
+      });
+    };
+
+    window.addEventListener('pointermove', onWindowPointerMove);
+    window.addEventListener('pointerup', onWindowPointerUp);
+    window.addEventListener('pointercancel', onWindowPointerUp);
+    
+    return () => {
+      window.removeEventListener('pointermove', onWindowPointerMove);
+      window.removeEventListener('pointerup', onWindowPointerUp);
+      window.removeEventListener('pointercancel', onWindowPointerUp);
+    };
+  }, [buttonTop]);
+
   const onPointerDown = useCallback(
-    (event: React.PointerEvent<HTMLButtonElement>) => {
-      // Begin drag immediately on press
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      // Start drag
       isDraggingRef.current = true;
       didMoveRef.current = false;
       suppressClickRef.current = false;
       dragStartPointerYRef.current = event.clientY;
       dragStartTopRef.current = buttonTop;
-      (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+      
+      // Do NOT capture pointer to allow click events to propagate to children normally
+      // (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+      
       console.debug(`${LOG_PREFIX} pointerDown`, {
         clientY: event.clientY,
         startTop: dragStartTopRef.current,
@@ -154,70 +204,44 @@ export default function App() {
     [buttonTop],
   );
 
-  const onPointerMove = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
-    if (!isDraggingRef.current) return;
-    const buttonHeight = buttonRef.current?.offsetHeight ?? 64;
-    const deltaY = event.clientY - dragStartPointerYRef.current;
-    const nextTopUnbounded = dragStartTopRef.current + deltaY;
-    const minTop = 0;
-    const maxTop = Math.max(0, window.innerHeight - buttonHeight);
-    const clamped = Math.min(Math.max(minTop, nextTopUnbounded), maxTop);
-    if (Math.abs(deltaY) > 1) didMoveRef.current = true;
-    setButtonTop(clamped);
-  }, []);
-
-  const endPointerSequence = useCallback(
-    (event: { pointerId?: number; clientY?: number; currentTarget?: EventTarget | null }) => {
-      if (isDraggingRef.current && didMoveRef.current) {
-        suppressClickRef.current = true;
-      }
-      isDraggingRef.current = false;
-      (event.currentTarget as HTMLElement | undefined)?.releasePointerCapture?.(event.pointerId as number);
-      console.debug(`${LOG_PREFIX} pointerEnd`, {
-        clientY: event.clientY,
-        finalTop: buttonTop,
-        suppressed: suppressClickRef.current,
-      });
-      // reset move flag after sequence ends
-      didMoveRef.current = false;
-    },
-    [buttonTop],
-  );
-
-  const onPointerUp = useCallback(
-    (event: React.PointerEvent<HTMLButtonElement>) => {
-      endPointerSequence({
-        pointerId: event.pointerId,
-        clientY: event.clientY,
-        currentTarget: event.currentTarget,
-      });
-    },
-    [endPointerSequence],
-  );
-
-  const onPointerCancel = useCallback(
-    (event: React.PointerEvent<HTMLButtonElement>) => {
-      endPointerSequence({
-        pointerId: event.pointerId,
-        clientY: event.clientY,
-        currentTarget: event.currentTarget,
-      });
-    },
-    [endPointerSequence],
-  );
-
-  const onClick = useCallback(() => {
-    // If we just dragged, skip the click action to avoid accidental toggles
+  const onMainClick = useCallback((e: React.MouseEvent) => {
+    // If we just dragged, skip the click action
     if (suppressClickRef.current) {
-      suppressClickRef.current = false;
       console.debug(`${LOG_PREFIX} click suppressed after drag`);
       return;
     }
-    console.debug(`${LOG_PREFIX} click -> sending OPEN_SIDE_PANEL message`);
+    e.stopPropagation();
+    
+    // Send explicit open/close command based on current visibility state
+    // Note: 'hidden' means the BUTTON is hidden (which happens when panel is open). 
+    // Actually, I disabled hiding the button.
+    // BUT 'hidden' state is still updated by SIDE_PANEL_OPENED/CLOSED messages.
+    // So: hidden=true means Panel is OPEN. hidden=false means Panel is CLOSED.
+    const isPanelOpen = hidden;
+    const type = isPanelOpen ? 'CLOSE_SIDE_PANEL' : 'OPEN_SIDE_PANEL';
+    
+    console.debug(`${LOG_PREFIX} click -> sending ${type}`);
     chrome.runtime
-      .sendMessage({ type: 'OPEN_SIDE_PANEL' })
+      .sendMessage({ type })
       .then(() => console.debug(`${LOG_PREFIX} message sent successfully`))
       .catch(error => console.error(`${LOG_PREFIX} sendMessage error`, error));
+  }, [hidden]);
+
+  const onScissorsClick = useCallback((e: React.MouseEvent) => {
+    if (suppressClickRef.current) {
+      return;
+    }
+    e.stopPropagation();
+    console.debug(`${LOG_PREFIX} onScissorsClick`);
+    autoSendRef.current = true;
+    setSelecting(true);
+    setSelectionStart(null);
+    setSelectionRect(null);
+    try {
+      chrome.runtime.sendMessage({ type: 'SCREENSHOT_OVERLAY_STARTED' });
+    } catch {
+      // ignore
+    }
   }, []);
 
   // Selection overlay interactions (fixed to viewport)
@@ -249,10 +273,20 @@ export default function App() {
     }
     const bounds = { ...selectionRect, dpr: window.devicePixelRatio || 1 };
     console.debug(`${LOG_PREFIX} finishSelection -> sending SCREENSHOT_SELECTION`, bounds);
-    chrome.runtime.sendMessage({ type: 'SCREENSHOT_SELECTION', bounds });
+    chrome.runtime.sendMessage({ 
+      type: 'SCREENSHOT_SELECTION', 
+      bounds,
+      autoSend: autoSendRef.current 
+    });
     setSelecting(false);
     setSelectionStart(null);
     setSelectionRect(null);
+    autoSendRef.current = false;
+    // Send OPEN_SIDE_PANEL message with a slight delay to ensure background script handles it
+    // This is a fallback in case the background script's open() fails in the capture callback
+    setTimeout(() => {
+      chrome.runtime.sendMessage({ type: 'OPEN_SIDE_PANEL' }).catch(() => undefined);
+    }, 500);
   }, [selectionRect]);
 
   const cancelSelection = useCallback(() => {
@@ -260,6 +294,7 @@ export default function App() {
     setSelecting(false);
     setSelectionStart(null);
     setSelectionRect(null);
+    autoSendRef.current = false;
     chrome.runtime.sendMessage({ type: 'SCREENSHOT_CANCELLED' }).catch(() => undefined);
   }, []);
 
@@ -286,66 +321,96 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [cancelSelection, finishSelection, selecting]);
 
-  if (hidden && !selecting) return null;
+  // Always render the button to ensure it's visible
+  // if (hidden && !selecting) return null;
 
   return (
     <>
-      {!hidden && (
-        <button
+      {/* Button Container */}
+      {(
+        <div
           ref={buttonRef}
           onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerCancel}
+          // onPointerMove={onPointerMove} // handled by window listener
+          // onPointerUp={onPointerUp} // handled by window listener
+          // onPointerCancel={onPointerCancel} // handled by window listener
           onDragStart={e => e.preventDefault()}
           draggable={false}
-          onClick={onClick}
           style={{
             position: 'fixed',
             top: `${buttonTop}px`,
             right: 0,
             zIndex: 2147483647,
-            width: '32px',
-            height: '64px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            paddingLeft: '12px', // Hit area padding
           }}
-          className={[
-            'select-none',
-            // width/height also set inline in style to avoid site CSS/Tailwind variance
-            'rounded-l-full',
-            'overflow-hidden',
-            'bg-transparent',
-            'shadow-xl',
-            'ring-2',
-            'ring-violet-600',
-            'backdrop-blur-[2px]',
-            'active:scale-[0.98]',
-            'cursor-grab',
-            'flex items-center justify-center',
-            'relative',
-            'touch-none',
-          ].join(' ')}
-          aria-label={t.openSidePanel}
-          title={t.openSidePanel}>
-          {/* subtle corner light to match rounded corner style */}
-          <span
-            className="pointer-events-none absolute -inset-1 right-0 opacity-40 blur-2xl"
-            style={{ background: 'radial-gradient(120px 60px at 10% 50%, rgba(255,255,255,0.35), transparent 70%)' }}
-          />
-          {/* icon */}
-          {iconUrl ? (
-            <span className="pointer-events-none flex select-none items-center justify-center rounded-full bg-white/15 p-[3px] ring-1 ring-white/20">
-              <img
-                src={iconUrl}
-                alt="app"
-                className="h-[24px] w-[24px] rounded-md"
-                style={{ width: '24px', height: '24px' }}
-                draggable={false}
-              />
-            </span>
-          ) : (
-            <span className="text-xl text-white">☰</span>
-          )}
-        </button>
+          className="select-none touch-none"
+          aria-label={t.openSidePanel}>
+          
+          {/* Scissors Button (Circle) */}
+          <div
+            role="button"
+            onClick={onScissorsClick}
+            className="group relative mb-2 flex h-[36px] w-[36px] cursor-pointer items-center justify-center rounded-full bg-gray-900 shadow-xl ring-1 ring-white/20 transition-transform hover:scale-110 active:scale-95"
+            title="Screenshot">
+            {/* subtle glow */}
+            <span
+              className="pointer-events-none absolute inset-0 rounded-full opacity-0 blur-md transition-opacity group-hover:opacity-50"
+              style={{ background: 'radial-gradient(circle at center, rgba(124,58,237,0.6), transparent 70%)' }}
+            />
+             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="6" cy="6" r="3"/>
+              <path d="M8.12 8.12 12 12"/>
+              <path d="M20 4 8.12 15.88"/>
+              <circle cx="6" cy="18" r="3"/>
+              <path d="M14.8 14.8 20 20"/>
+            </svg>
+          </div>
+
+          {/* Main Button (Rectangle with rounded left corners) */}
+          <div
+            role="button"
+            onClick={onMainClick}
+            style={{
+              width: '32px',
+              height: '48px',
+              borderTopLeftRadius: '16px',
+              borderBottomLeftRadius: '16px',
+            }}
+            className={[
+              'flex items-center justify-center',
+              'overflow-hidden',
+              'bg-transparent',
+              'shadow-xl',
+              'ring-2',
+              'ring-violet-600',
+              'backdrop-blur-[2px]',
+              'cursor-grab',
+              'relative',
+            ].join(' ')}
+            title={t.openSidePanel}>
+            {/* subtle corner light */}
+            <span
+              className="pointer-events-none absolute -inset-1 right-0 opacity-40 blur-2xl"
+              style={{ background: 'radial-gradient(120px 60px at 10% 50%, rgba(255,255,255,0.35), transparent 70%)' }}
+            />
+            {iconUrl ? (
+              <span className="pointer-events-none flex select-none items-center justify-center rounded-md bg-white/15 p-[3px] ring-1 ring-white/20">
+                <img
+                  src={iconUrl}
+                  alt="app"
+                  className="h-[24px] w-[24px] rounded-sm"
+                  style={{ width: '24px', height: '24px' }}
+                  draggable={false}
+                />
+              </span>
+            ) : (
+              <span className="text-xl text-white">☰</span>
+            )}
+          </div>
+        </div>
       )}
 
       {selecting && (

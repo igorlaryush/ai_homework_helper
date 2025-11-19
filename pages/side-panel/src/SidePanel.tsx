@@ -10,6 +10,8 @@ import { Moon, Sun } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TourStep } from './components/OnboardingTour';
 
+const LOG_PREFIX = '[CEB][SidePanel]';
+
 const StreamableMarkdown = ({
   text,
   streaming,
@@ -2654,6 +2656,31 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
     chrome.runtime.sendMessage({ type: 'SCREENSHOT_REQUEST' }).catch(() => setScreenshotActive(false));
   }, [createNewChat]);
 
+  // Check for pending screenshot (from floating button)
+  useEffect(() => {
+    chrome.storage.local.get(['pendingScreenshot']).then(async res => {
+      const pending = res.pendingScreenshot as {
+        dataUrl: string;
+        bounds: { x: number; y: number; width: number; height: number; dpr: number };
+        autoSend: boolean;
+        timestamp: number;
+      };
+      if (pending && Date.now() - pending.timestamp < 60000) {
+        console.debug(`${LOG_PREFIX} found pendingScreenshot`);
+        await chrome.storage.local.remove('pendingScreenshot');
+        if (pending.autoSend) {
+          autoSendAfterScreenshotRef.current = true;
+        }
+        try {
+          const cropped = await cropImageDataUrl(pending.dataUrl, pending.bounds);
+          setAttachments(prev => [...prev, { id: `${Date.now()}-${prev.length}`, kind: 'image', dataUrl: cropped }]);
+        } catch (e) {
+          console.error(`${LOG_PREFIX} failed to process pending screenshot`, e);
+        }
+      }
+    });
+  }, []);
+
   // Handle screenshot results and errors
   useEffect(() => {
     const onMessage = async (message: unknown) => {
@@ -2661,6 +2688,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
         type?: string;
         dataUrl?: string;
         bounds?: { x: number; y: number; width: number; height: number; dpr: number };
+        autoSend?: boolean;
       };
       if (msg?.type === 'SCREENSHOT_OVERLAY_STARTED') {
         setScreenshotOverlayStarted(true);
@@ -2668,6 +2696,9 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
         return;
       }
       if (msg?.type === 'SCREENSHOT_CAPTURED' && msg.dataUrl && msg.bounds) {
+        if (msg.autoSend) {
+          autoSendAfterScreenshotRef.current = true;
+        }
         try {
           const cropped = await cropImageDataUrl(msg.dataUrl, msg.bounds);
           setAttachments(prev => [...prev, { id: `${Date.now()}-${prev.length}`, kind: 'image', dataUrl: cropped }]);

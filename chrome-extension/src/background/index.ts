@@ -52,53 +52,34 @@ chrome.runtime.onConnect.addListener(port => {
 const toggleSidePanelForTab = async (tabId: number): Promise<void> => {
   console.debug(`${LOG_PREFIX} toggleSidePanelForTab start`, { tabId });
   try {
-    const hasGetOptions = typeof (chrome.sidePanel as { getOptions?: unknown }).getOptions === 'function';
+    // Use our tracked state to determine if we should close or open
+    // This avoids the issue where getOptions().enabled is true but the panel was manually closed by the user
+    const isKnownOpen = tabIdToPanelOpenState.get(tabId) ?? false;
+    console.debug(`${LOG_PREFIX} toggle state`, { isKnownOpen });
+
     const hasSetOptions = typeof (chrome.sidePanel as { setOptions?: unknown }).setOptions === 'function';
     const hasOpen = typeof (chrome.sidePanel as { open?: unknown }).open === 'function';
-    console.debug(`${LOG_PREFIX} API availability`, { hasGetOptions, hasSetOptions, hasOpen });
 
-    let isEnabled: boolean | undefined;
-    if (hasGetOptions) {
-      try {
-        const options = await chrome.sidePanel.getOptions!({ tabId });
-        console.debug(`${LOG_PREFIX} getOptions ->`, options);
-        isEnabled = options?.enabled;
-      } catch (err) {
-        console.error(`${LOG_PREFIX} getOptions error`, err);
-      }
-    } else {
-      console.debug(`${LOG_PREFIX} getOptions not available`);
-    }
-
-    if (isEnabled === true) {
+    if (isKnownOpen) {
+      // If we think it's open, try to close it by disabling
       if (hasSetOptions) {
-        console.debug(`${LOG_PREFIX} disabling side panel via setOptions({ enabled: false })`);
+        console.debug(`${LOG_PREFIX} closing side panel via setOptions({ enabled: false })`);
         await chrome.sidePanel.setOptions!({ tabId, enabled: false });
-        tabIdToPanelOpenState.set(tabId, false);
-        void chrome.tabs.sendMessage(tabId, { type: 'SIDE_PANEL_CLOSED' });
-        console.debug(`${LOG_PREFIX} disabled side panel`);
       } else {
-        console.debug(`${LOG_PREFIX} setOptions not available; cannot disable`);
+        console.debug(`${LOG_PREFIX} cannot close: setOptions not available`);
       }
-      return;
-    }
-
-    if (hasSetOptions) {
-      console.debug(`${LOG_PREFIX} enabling side panel via setOptions({ enabled: true, path })`);
-      await chrome.sidePanel.setOptions!({ tabId, enabled: true, path: 'side-panel/index.html' });
-      console.debug(`${LOG_PREFIX} enabled side panel with path`);
     } else {
-      console.debug(`${LOG_PREFIX} setOptions not available; skipping enable`);
-    }
-
-    if (hasOpen) {
-      console.debug(`${LOG_PREFIX} opening side panel via open({ tabId })`);
-      await chrome.sidePanel.open!({ tabId });
-      tabIdToPanelOpenState.set(tabId, true);
-      void chrome.tabs.sendMessage(tabId, { type: 'SIDE_PANEL_OPENED' });
-      console.debug(`${LOG_PREFIX} open resolved`);
-    } else {
-      console.debug(`${LOG_PREFIX} open not available; cannot open`);
+      // If we think it's closed, enable and open
+      if (hasSetOptions) {
+        console.debug(`${LOG_PREFIX} enabling side panel via setOptions({ enabled: true })`);
+        await chrome.sidePanel.setOptions!({ tabId, enabled: true, path: 'side-panel/index.html' });
+      }
+      if (hasOpen) {
+        console.debug(`${LOG_PREFIX} opening side panel via open({ tabId })`);
+        await chrome.sidePanel.open!({ tabId });
+      } else {
+        console.debug(`${LOG_PREFIX} cannot open: open() not available`);
+      }
     }
   } catch (error) {
     console.error(`${LOG_PREFIX} Failed to toggle side panel`, error);
@@ -205,15 +186,30 @@ chrome.runtime.onMessage.addListener((message, sender) => {
 
   // Selection result from content script: capture visible tab and forward to side panel
   if (message?.type === 'SCREENSHOT_SELECTION') {
-    const { bounds } = message as { bounds?: { x: number; y: number; width: number; height: number; dpr: number } };
+    const { bounds, autoSend } = message as {
+      bounds?: { x: number; y: number; width: number; height: number; dpr: number };
+      autoSend?: boolean;
+    };
     console.debug(`${LOG_PREFIX} SCREENSHOT_SELECTION`, bounds);
     chrome.tabs.captureVisibleTab(chrome.windows.WINDOW_ID_CURRENT, { format: 'png' }, dataUrl => {
       if (!dataUrl) {
         console.error(`${LOG_PREFIX} captureVisibleTab returned empty dataUrl`, chrome.runtime.lastError);
         return;
       }
-      console.debug(`${LOG_PREFIX} captureVisibleTab OK, sending SCREENSHOT_CAPTURED`);
-      chrome.runtime.sendMessage({ type: 'SCREENSHOT_CAPTURED', dataUrl, bounds }).catch(() => undefined);
+      console.debug(`${LOG_PREFIX} captureVisibleTab OK`);
+
+      // Save to storage for side panel to pick up
+      const pending = { dataUrl, bounds, autoSend, timestamp: Date.now() };
+      chrome.storage.local.set({ pendingScreenshot: pending }).then(() => {
+        console.debug(`${LOG_PREFIX} pendingScreenshot saved, opening side panel`);
+        if (typeof tabId === 'number') {
+          chrome.sidePanel.open({ tabId }).catch(err => {
+            console.error(`${LOG_PREFIX} Failed to open side panel from background`, err);
+          });
+        }
+      });
+
+      chrome.runtime.sendMessage({ type: 'SCREENSHOT_CAPTURED', dataUrl, bounds, autoSend }).catch(() => undefined);
     });
     return;
   }
@@ -225,22 +221,32 @@ chrome.runtime.onMessage.addListener((message, sender) => {
 
   if (message?.type === 'OPEN_SIDE_PANEL') {
     try {
-      chrome.sidePanel
-        .open?.({ tabId })
-        .then(() => {
-          tabIdToPanelOpenState.set(tabId, true);
-          void chrome.tabs.sendMessage(tabId, { type: 'SIDE_PANEL_OPENED' });
-          console.debug(`${LOG_PREFIX} open() resolved (OPEN_SIDE_PANEL)`);
-        })
-        .catch(error => console.error(`${LOG_PREFIX} open() error (OPEN_SIDE_PANEL)`, error));
-      void chrome.sidePanel.setOptions?.({ tabId, enabled: true, path: 'side-panel/index.html' });
+      // Enable first, then open
+      await chrome.sidePanel.setOptions?.({ tabId, enabled: true, path: 'side-panel/index.html' });
+      await chrome.sidePanel.open?.({ tabId });
+      tabIdToPanelOpenState.set(tabId, true);
+      void chrome.tabs.sendMessage(tabId, { type: 'SIDE_PANEL_OPENED' });
+      console.debug(`${LOG_PREFIX} OPEN_SIDE_PANEL done`);
     } catch (error) {
-      console.error(`${LOG_PREFIX} immediate open() threw (OPEN_SIDE_PANEL)`, error);
+      console.error(`${LOG_PREFIX} OPEN_SIDE_PANEL failed`, error);
+    }
+    return;
+  }
+
+  if (message?.type === 'CLOSE_SIDE_PANEL') {
+    try {
+      await chrome.sidePanel.setOptions?.({ tabId, enabled: false });
+      tabIdToPanelOpenState.set(tabId, false);
+      void chrome.tabs.sendMessage(tabId, { type: 'SIDE_PANEL_CLOSED' });
+      console.debug(`${LOG_PREFIX} CLOSE_SIDE_PANEL done`);
+    } catch (error) {
+      console.error(`${LOG_PREFIX} CLOSE_SIDE_PANEL failed`, error);
     }
     return;
   }
 
   if (message?.type === 'TOGGLE_SIDE_PANEL') {
+    // Fallback if client logic is insufficient
     void toggleSidePanelForTab(tabId);
   }
 });
