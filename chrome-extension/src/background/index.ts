@@ -203,6 +203,20 @@ const handleMessage = async (msg: unknown, sender: chrome.runtime.MessageSender)
   if (message?.type === 'SCREENSHOT_SELECTION') {
     const { bounds, autoSend } = message;
     console.debug(`${LOG_PREFIX} SCREENSHOT_SELECTION`, bounds);
+
+    // Open side panel immediately to capture user gesture
+    const openPanelPromise = (async () => {
+      if (typeof tabId === 'number') {
+        try {
+          await chrome.sidePanel.open({ tabId });
+          // Update state and notify tab to keep UI in sync
+          tabIdToPanelOpenState.set(tabId, true);
+          await chrome.tabs.sendMessage(tabId, { type: 'SIDE_PANEL_OPENED' }).catch(() => {});
+        } catch (err) {
+          console.debug(`${LOG_PREFIX} Failed to open side panel from background`, err);
+        }
+      }
+    })();
     
     const dataUrl = await new Promise<string>(resolve => {
       chrome.tabs.captureVisibleTab(chrome.windows.WINDOW_ID_CURRENT, { format: 'png' }, resolve);
@@ -215,13 +229,11 @@ const handleMessage = async (msg: unknown, sender: chrome.runtime.MessageSender)
     
     const pending = { dataUrl, bounds, autoSend, timestamp: Date.now() };
     await chrome.storage.local.set({ pendingScreenshot: pending });
-    console.debug(`${LOG_PREFIX} pendingScreenshot saved, opening side panel`);
+    console.debug(`${LOG_PREFIX} pendingScreenshot saved`);
     
-    if (typeof tabId === 'number') {
-      await chrome.sidePanel.open({ tabId }).catch(err => {
-         console.debug(`${LOG_PREFIX} Failed to open side panel from background (non-fatal)`, err);
-      });
-    }
+    // Ensure panel open request has processed
+    await openPanelPromise;
+
     await chrome.runtime.sendMessage({ type: 'SCREENSHOT_CAPTURED', dataUrl, bounds, autoSend }).catch(() => undefined);
     return;
   }
