@@ -2555,7 +2555,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
           <div className="flex items-center gap-3">
             <div className="text-base font-semibold">{headerTitle}</div>
             {/* Rating */}
-            <div className="flex items-center gap-2">
+            <div className="hidden min-[380px]:flex items-center gap-2">
               <span className={cn('text-xs', isLight ? 'text-slate-500' : 'text-slate-300')}>{t.rateUs}</span>
               <div className="flex items-center">
                 {[1, 2, 3, 4, 5].map(i => (
@@ -2605,7 +2605,7 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
               </div>
             </div>
           </div>
-          <div className="relative flex items-center gap-2">
+          <div className="relative flex flex-shrink-0 items-center gap-2">
             {/* Theme toggle */}
             <Tooltip>
               <TooltipTrigger asChild>
