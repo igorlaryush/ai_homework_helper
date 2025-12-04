@@ -95,7 +95,7 @@ export default function App() {
     };
     chrome.storage?.onChanged.addListener(onStorageChanged);
     const onMessage = (message: unknown) => {
-      const msg = message as { type?: string; isOpen?: boolean };
+      const msg = message as { type?: string; isOpen?: boolean; autoSend?: boolean };
       if (msg?.type === 'SIDE_PANEL_OPENED') {
         console.debug(`${LOG_PREFIX} received SIDE_PANEL_OPENED`);
         setHidden(true);
@@ -106,7 +106,8 @@ export default function App() {
         console.debug(`${LOG_PREFIX} received SIDE_PANEL_STATE`, msg);
         setHidden(Boolean(msg.isOpen));
       } else if (msg?.type === 'BEGIN_SELECTION') {
-        console.debug(`${LOG_PREFIX} received BEGIN_SELECTION`);
+        console.debug(`${LOG_PREFIX} received BEGIN_SELECTION`, msg);
+        autoSendRef.current = Boolean(msg.autoSend);
         setSelecting(true);
         setSelectionStart(null);
         setSelectionRect(null);
@@ -150,7 +151,7 @@ export default function App() {
       const maxTop = Math.max(0, window.innerHeight - buttonHeight);
       const clamped = Math.min(Math.max(minTop, nextTopUnbounded), maxTop);
 
-      if (Math.abs(deltaY) > 2) {
+      if (Math.abs(deltaY) > 4) {
         didMoveRef.current = true;
         suppressClickRef.current = true;
       }
@@ -206,11 +207,14 @@ export default function App() {
 
   const onMainClick = useCallback((e: React.MouseEvent) => {
     // If we just dragged, skip the click action
+    console.debug(`${LOG_PREFIX} onMainClick`, { suppressed: suppressClickRef.current, hidden });
+    
     if (suppressClickRef.current) {
       console.debug(`${LOG_PREFIX} click suppressed after drag`);
       return;
     }
     e.stopPropagation();
+    e.preventDefault();
     
     // Send explicit open/close command based on current visibility state
     // Note: 'hidden' means the BUTTON is hidden (which happens when panel is open). 
@@ -223,7 +227,7 @@ export default function App() {
     console.debug(`${LOG_PREFIX} click -> sending ${type}`);
     chrome.runtime
       .sendMessage({ type })
-      .then(() => console.debug(`${LOG_PREFIX} message sent successfully`))
+      .then(res => console.debug(`${LOG_PREFIX} message sent successfully`, res))
       .catch(error => console.error(`${LOG_PREFIX} sendMessage error`, error));
   }, [hidden]);
 
@@ -282,11 +286,7 @@ export default function App() {
     setSelectionStart(null);
     setSelectionRect(null);
     autoSendRef.current = false;
-    // Send OPEN_SIDE_PANEL message with a slight delay to ensure background script handles it
-    // This is a fallback in case the background script's open() fails in the capture callback
-    setTimeout(() => {
-      chrome.runtime.sendMessage({ type: 'OPEN_SIDE_PANEL' }).catch(() => undefined);
-    }, 500);
+    // Redundant OPEN_SIDE_PANEL removed as background handles opening on SCREENSHOT_SELECTION
   }, [selectionRect]);
 
   const cancelSelection = useCallback(() => {

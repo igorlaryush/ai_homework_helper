@@ -1,3 +1,4 @@
+import env from '@extension/env';
 import { readFileSync } from 'node:fs';
 import type { ManifestType } from '@extension/shared';
 
@@ -30,7 +31,7 @@ const manifest = {
   },
   version: packageJson.version,
   description: '__MSG_shortDesc__',
-  host_permissions: ['<all_urls>', 'https://chatgpt-proxy-500570371278.us-west2.run.app/*'],
+  host_permissions: ['<all_urls>', `${env.API_HOST}/*`],
   permissions: ['storage', 'scripting', 'tabs', 'activeTab', 'sidePanel'],
   options_page: 'options/index.html',
   background: {

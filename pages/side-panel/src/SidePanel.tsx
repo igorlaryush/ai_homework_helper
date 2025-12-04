@@ -34,7 +34,7 @@ const StreamableMarkdown = ({
   }
 
   return (
-    <MarkdownText className={cn('aui-md', className)} key={`${streaming ? 's:' : ''}${content}`}>
+    <MarkdownText className={cn('aui-md', className)}>
       {content}
     </MarkdownText>
   );
@@ -182,7 +182,9 @@ const streamResponsesApi = async (
   // Mark unused when using backend proxy
   void _apiKey;
   try {
-    const res = await fetch('https://chatgpt-proxy-500570371278.us-west2.run.app/v1/responses', {
+    console.log(`${LOG_PREFIX} streamResponsesApi start`, { model: body.model, stream: true });
+    console.log(`${LOG_PREFIX} using API host:`, process.env.API_HOST);
+    const res = await fetch(`${process.env.API_HOST}/v1/responses`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -198,10 +200,11 @@ const streamResponsesApi = async (
       } catch {
         // ignore
       }
+      console.error(`${LOG_PREFIX} streamResponsesApi error status`, res.status, bodyText);
       // Fallback: on 5xx, retry without streaming (JSON response)
       if (res.status === 500 || res.status === 502 || res.status === 503 || res.status === 504) {
         try {
-          const nonStream = await fetch('https://chatgpt-proxy-500570371278.us-west2.run.app/v1/responses', {
+          const nonStream = await fetch(`${process.env.API_HOST}/v1/responses`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -245,7 +248,7 @@ const streamResponsesApi = async (
     if (!res.body) {
       // Fallback when stream body missing: try non-stream JSON once
       try {
-        const nonStream = await fetch('https://chatgpt-proxy-500570371278.us-west2.run.app/v1/responses', {
+        const nonStream = await fetch(`${env.API_HOST}/v1/responses`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -361,7 +364,7 @@ const cropImageDataUrl = async (
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('No 2D context');
   ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
-  return canvas.toDataURL('image/png');
+  return canvas.toDataURL('image/jpeg', 0.7);
 };
 
 // Upload a file to OpenAI Files API and return file_id
@@ -373,7 +376,8 @@ const uploadFileToOpenAI = async ({ apiKey: _apiKey, file }: { apiKey: string; f
   // Use user_data for files that will be used as model inputs per OpenAI guidance
   form.append('purpose', 'user_data');
 
-  const res = await fetch('https://chatgpt-proxy-500570371278.us-west2.run.app/v1/files', {
+  console.log(`${LOG_PREFIX} uploading file to host:`, process.env.API_HOST);
+  const res = await fetch(`${process.env.API_HOST}/v1/files`, {
     method: 'POST',
     body: form,
   });
@@ -1045,6 +1049,12 @@ const SidePanel = () => {
               err && typeof err === 'object' && 'status' in (err as Record<string, unknown>)
                 ? Number((err as Record<string, unknown>).status)
                 : undefined;
+            
+            // Log detail for troubleshooting
+            if (status === 400) {
+               console.warn('[CEB][SidePanel] 400 Bad Request. Body:', (err as any).body);
+            }
+
             // Fallback 1: retry without web_search tool on 403
             if (status === 403 && webAccessEnabled) {
               {
@@ -1259,7 +1269,7 @@ const SidePanel = () => {
     setScreenshotError('');
     setScreenshotOverlayStarted(false);
     setScreenshotActive(true);
-    chrome.runtime.sendMessage({ type: 'SCREENSHOT_REQUEST' }).catch(() => setScreenshotActive(false));
+    chrome.runtime.sendMessage({ type: 'SCREENSHOT_REQUEST', autoSend: true }).catch(() => setScreenshotActive(false));
   }, []);
 
   const onClickUploadImage = useCallback(() => {
@@ -1795,9 +1805,11 @@ Now generate the best possible ${fmt} in ${lang} with a ${tone} tone and ${len} 
   // If screenshot was initiated from welcome screen, auto-send once it is attached
   useEffect(() => {
     if (autoSendAfterScreenshotRef.current && attachments.some(a => a.kind === 'image')) {
+      if (!activeId) {
+        createNewChat();
+        return;
+      }
       autoSendAfterScreenshotRef.current = false;
-      // Ensure active chat exists and we're in ask mode
-      if (!activeId) createNewChat();
       setMode('ask');
       // Defer to next tick to allow state to settle
       queueMicrotask(() => handleSendRef.current());

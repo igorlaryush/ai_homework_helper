@@ -52,8 +52,6 @@ chrome.runtime.onConnect.addListener(port => {
 const toggleSidePanelForTab = async (tabId: number): Promise<void> => {
   console.debug(`${LOG_PREFIX} toggleSidePanelForTab start`, { tabId });
   try {
-    // Use our tracked state to determine if we should close or open
-    // This avoids the issue where getOptions().enabled is true but the panel was manually closed by the user
     const isKnownOpen = tabIdToPanelOpenState.get(tabId) ?? false;
     console.debug(`${LOG_PREFIX} toggle state`, { isKnownOpen });
 
@@ -61,7 +59,6 @@ const toggleSidePanelForTab = async (tabId: number): Promise<void> => {
     const hasOpen = typeof (chrome.sidePanel as { open?: unknown }).open === 'function';
 
     if (isKnownOpen) {
-      // If we think it's open, try to close it by disabling
       if (hasSetOptions) {
         console.debug(`${LOG_PREFIX} closing side panel via setOptions({ enabled: false })`);
         await chrome.sidePanel.setOptions!({ tabId, enabled: false });
@@ -69,9 +66,10 @@ const toggleSidePanelForTab = async (tabId: number): Promise<void> => {
         console.debug(`${LOG_PREFIX} cannot close: setOptions not available`);
       }
     } else {
-      // If we think it's closed, enable and open
       if (hasSetOptions) {
         console.debug(`${LOG_PREFIX} enabling side panel via setOptions({ enabled: true })`);
+        // Note: We enable it first. The actual open might require a user gesture which this function might not have
+        // if it's called deeply async. But typically toggle is called from a shortcut or similar.
         await chrome.sidePanel.setOptions!({ tabId, enabled: true, path: 'side-panel/index.html' });
       }
       if (hasOpen) {
@@ -86,8 +84,61 @@ const toggleSidePanelForTab = async (tabId: number): Promise<void> => {
   }
 };
 
-chrome.runtime.onMessage.addListener((message, sender) => {
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.debug(`${LOG_PREFIX} onMessage`, message, { senderTabId: sender.tab?.id });
+  
+  const tabId = sender.tab?.id;
+
+    // OPTIMISTIC OPEN: Call chrome.sidePanel.open synchronously if possible to capture user gesture
+  if (message?.type === 'OPEN_SIDE_PANEL' && typeof tabId === 'number') {
+    console.debug(`${LOG_PREFIX} synchronous OPEN_SIDE_PANEL attempt`);
+    
+    // To satisfy "user gesture" requirement, we must call open() immediately in the synchronous tick.
+    // We cannot await setOptions(). 
+    // Strategy: Fire open() immediately (it might fail if not enabled), AND fire setOptions().
+    // If open() fails because not enabled, we retry it in the callback of setOptions (though that might lose gesture).
+    // BUT: If we set openPanelOnActionClick: true globally, we might not need explicit open() if it was a click?
+    // No, this is a custom button.
+    
+    // Best chance: 
+    // 1. Enable it (fire and forget promise)
+    // 2. Open it (synchronously / immediately)
+    
+    // Check if we should skip setOptions if panel is already active?
+    // chrome.sidePanel.setOptions({ tabId, enabled: true, path: 'side-panel/index.html' });
+    
+    try {
+        // Try opening first; if it fails, we might need to enable it
+        chrome.sidePanel.open({ tabId });
+        console.debug(`${LOG_PREFIX} open() called synchronously`);
+    } catch (err) {
+        console.warn(`${LOG_PREFIX} synchronous open() failed, trying setOptions`, err);
+        chrome.sidePanel.setOptions({ tabId, enabled: true, path: 'side-panel/index.html' })
+            .then(() => {
+                 // Retry open? Usually user gesture is gone by now.
+                 console.debug(`${LOG_PREFIX} setOptions done`);
+            });
+    }
+      
+    // We also allow handleMessage to run to update state and send events.
+  }
+
+  // Handle message asynchronously
+  handleMessage(message, sender)
+    .then(response => {
+      if (response !== undefined) sendResponse(response);
+    })
+    .catch(error => {
+      console.error(`${LOG_PREFIX} handleMessage error`, error);
+    });
+
+  return true; // Keep channel open for async response
+});
+
+const handleMessage = async (msg: unknown, sender: chrome.runtime.MessageSender) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const message = msg as any;
   const tabId = sender.tab?.id;
 
   if (message?.type === 'IS_SIDE_PANEL_OPEN') {
@@ -98,119 +149,80 @@ chrome.runtime.onMessage.addListener((message, sender) => {
     return;
   }
 
-  // Screenshot request from side panel: ask the active tab to show selection overlay
   if (message?.type === 'SCREENSHOT_REQUEST') {
-    console.debug(`${LOG_PREFIX} SCREENSHOT_REQUEST received`);
-    chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
-      const activeTab = tabs[0];
-      const tabId = activeTab?.id;
-      const tabUrl = activeTab?.url ?? '';
+    const { autoSend } = message;
+    console.debug(`${LOG_PREFIX} SCREENSHOT_REQUEST received`, { autoSend });
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const activeTab = tabs[0];
+    const activeTabId = activeTab?.id;
+    const tabUrl = activeTab?.url ?? '';
 
-      if (typeof tabId !== 'number') {
-        console.warn(`${LOG_PREFIX} no activeTab for BEGIN_SELECTION`);
-        chrome.runtime.sendMessage({ type: 'SCREENSHOT_CANCELLED' }).catch(() => undefined);
-        return;
-      }
+    if (typeof activeTabId !== 'number') {
+      console.warn(`${LOG_PREFIX} no activeTab for BEGIN_SELECTION`);
+      await chrome.runtime.sendMessage({ type: 'SCREENSHOT_CANCELLED' }).catch(() => undefined);
+      return;
+    }
 
-      // Some pages are restricted and do not allow content scripts
-      const isRestrictedUrl =
-        tabUrl.startsWith('chrome://') ||
-        tabUrl.startsWith('chrome-search://') ||
-        tabUrl.startsWith('edge://') ||
-        tabUrl.startsWith('brave://') ||
-        tabUrl.startsWith('vivaldi://') ||
-        tabUrl.startsWith('opera://') ||
-        tabUrl.startsWith('about:') ||
-        tabUrl.startsWith('chrome-extension://') ||
-        /^https?:\/\/chrome\.google\.com\//.test(tabUrl);
-      if (isRestrictedUrl) {
-        console.warn(`${LOG_PREFIX} cannot inject content script on restricted URL`, { tabUrl });
-        chrome.runtime
-          .sendMessage({ type: 'SCREENSHOT_NOT_ALLOWED', reason: 'restricted', url: tabUrl })
-          .catch(() => undefined);
-        return;
-      }
+    const isRestrictedUrl =
+      tabUrl.startsWith('chrome://') ||
+      tabUrl.startsWith('chrome-search://') ||
+      tabUrl.startsWith('edge://') ||
+      tabUrl.startsWith('brave://') ||
+      tabUrl.startsWith('vivaldi://') ||
+      tabUrl.startsWith('opera://') ||
+      tabUrl.startsWith('about:') ||
+      tabUrl.startsWith('chrome-extension://') ||
+      /^https?:\/\/chrome\.google\.com\//.test(tabUrl);
 
-      const sendBeginSelection = () => {
-        try {
-          chrome.tabs.sendMessage(tabId, { type: 'BEGIN_SELECTION' }, () => {
-            const error = chrome.runtime.lastError;
-            if (error) {
-              console.warn(`${LOG_PREFIX} BEGIN_SELECTION send failed; attempting injection`, error);
-              try {
-                chrome.scripting.executeScript({ target: { tabId }, files: ['content-ui/all.iife.js'] }, () => {
-                  const injectError = chrome.runtime.lastError;
-                  if (injectError) {
-                    console.error(`${LOG_PREFIX} executeScript failed`, injectError);
-                    chrome.runtime
-                      .sendMessage({ type: 'SCREENSHOT_NOT_ALLOWED', reason: 'inject_failed', url: tabUrl })
-                      .catch(() => undefined);
-                    return;
-                  }
-                  // Retry shortly after successful injection to ensure listeners are ready
-                  setTimeout(() => {
-                    chrome.tabs.sendMessage(tabId, { type: 'BEGIN_SELECTION' }, () => {
-                      const retryError = chrome.runtime.lastError;
-                      if (retryError) {
-                        console.error(`${LOG_PREFIX} Retry BEGIN_SELECTION failed`, retryError);
-                        chrome.runtime
-                          .sendMessage({ type: 'SCREENSHOT_NOT_ALLOWED', reason: 'retry_failed', url: tabId })
-                          .catch(() => undefined);
-                      } else {
-                        console.debug(`${LOG_PREFIX} BEGIN_SELECTION delivered after injection`, { tabId });
-                      }
-                    });
-                  }, 80);
-                });
-              } catch (e) {
-                console.error(`${LOG_PREFIX} executeScript threw`, e);
-                chrome.runtime
-                  .sendMessage({ type: 'SCREENSHOT_NOT_ALLOWED', reason: 'execute_threw', url: tabId })
-                  .catch(() => undefined);
-              }
-            } else {
-              console.debug(`${LOG_PREFIX} BEGIN_SELECTION delivered`, { tabId });
-            }
-          });
-        } catch (e) {
-          console.error(`${LOG_PREFIX} tabs.sendMessage threw`, e);
-          chrome.runtime.sendMessage({ type: 'SCREENSHOT_CANCELLED' }).catch(() => undefined);
-        }
-      };
+    if (isRestrictedUrl) {
+      console.warn(`${LOG_PREFIX} cannot inject content script on restricted URL`, { tabUrl });
+      await chrome.runtime.sendMessage({ type: 'SCREENSHOT_NOT_ALLOWED', reason: 'restricted', url: tabUrl }).catch(() => undefined);
+      return;
+    }
 
-      console.debug(`${LOG_PREFIX} sending BEGIN_SELECTION to tab`, { tabId });
-      sendBeginSelection();
-    });
+    try {
+      await chrome.tabs.sendMessage(activeTabId, { type: 'BEGIN_SELECTION', autoSend });
+      console.debug(`${LOG_PREFIX} BEGIN_SELECTION delivered`, { activeTabId });
+    } catch (error) {
+       console.warn(`${LOG_PREFIX} BEGIN_SELECTION send failed; attempting injection`, error);
+       try {
+         await chrome.scripting.executeScript({ target: { tabId: activeTabId }, files: ['content-ui/all.iife.js'] });
+         // Retry shortly after injection
+         setTimeout(() => {
+            chrome.tabs.sendMessage(activeTabId, { type: 'BEGIN_SELECTION', autoSend })
+                .catch(e => console.error(`${LOG_PREFIX} Retry BEGIN_SELECTION failed`, e));
+         }, 100);
+       } catch (injectError) {
+         console.error(`${LOG_PREFIX} executeScript failed`, injectError);
+         await chrome.runtime.sendMessage({ type: 'SCREENSHOT_NOT_ALLOWED', reason: 'inject_failed', url: tabUrl }).catch(() => undefined);
+       }
+    }
     return;
   }
 
-  // Selection result from content script: capture visible tab and forward to side panel
   if (message?.type === 'SCREENSHOT_SELECTION') {
-    const { bounds, autoSend } = message as {
-      bounds?: { x: number; y: number; width: number; height: number; dpr: number };
-      autoSend?: boolean;
-    };
+    const { bounds, autoSend } = message;
     console.debug(`${LOG_PREFIX} SCREENSHOT_SELECTION`, bounds);
-    chrome.tabs.captureVisibleTab(chrome.windows.WINDOW_ID_CURRENT, { format: 'png' }, dataUrl => {
-      if (!dataUrl) {
-        console.error(`${LOG_PREFIX} captureVisibleTab returned empty dataUrl`, chrome.runtime.lastError);
-        return;
-      }
-      console.debug(`${LOG_PREFIX} captureVisibleTab OK`);
-
-      // Save to storage for side panel to pick up
-      const pending = { dataUrl, bounds, autoSend, timestamp: Date.now() };
-      chrome.storage.local.set({ pendingScreenshot: pending }).then(() => {
-        console.debug(`${LOG_PREFIX} pendingScreenshot saved, opening side panel`);
-        if (typeof tabId === 'number') {
-          chrome.sidePanel.open({ tabId }).catch(err => {
-            console.error(`${LOG_PREFIX} Failed to open side panel from background`, err);
-          });
-        }
-      });
-
-      chrome.runtime.sendMessage({ type: 'SCREENSHOT_CAPTURED', dataUrl, bounds, autoSend }).catch(() => undefined);
+    
+    const dataUrl = await new Promise<string>(resolve => {
+      chrome.tabs.captureVisibleTab(chrome.windows.WINDOW_ID_CURRENT, { format: 'png' }, resolve);
     });
+
+    if (!dataUrl) {
+      console.error(`${LOG_PREFIX} captureVisibleTab returned empty dataUrl`, chrome.runtime.lastError);
+      return;
+    }
+    
+    const pending = { dataUrl, bounds, autoSend, timestamp: Date.now() };
+    await chrome.storage.local.set({ pendingScreenshot: pending });
+    console.debug(`${LOG_PREFIX} pendingScreenshot saved, opening side panel`);
+    
+    if (typeof tabId === 'number') {
+      await chrome.sidePanel.open({ tabId }).catch(err => {
+         console.debug(`${LOG_PREFIX} Failed to open side panel from background (non-fatal)`, err);
+      });
+    }
+    await chrome.runtime.sendMessage({ type: 'SCREENSHOT_CAPTURED', dataUrl, bounds, autoSend }).catch(() => undefined);
     return;
   }
 
@@ -220,39 +232,42 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   }
 
   if (message?.type === 'OPEN_SIDE_PANEL') {
+    // Logic handled mostly in synchronous block, but we update state here
     try {
-      // Enable first, then open
-      await chrome.sidePanel.setOptions?.({ tabId, enabled: true, path: 'side-panel/index.html' });
-      await chrome.sidePanel.open?.({ tabId });
+      console.debug(`${LOG_PREFIX} OPEN_SIDE_PANEL (async update)`);
+      // We do NOT call open() here again to avoid "User gesture required" error 
+      // if the async gap killed the token.
+      // But we do update state.
       tabIdToPanelOpenState.set(tabId, true);
-      void chrome.tabs.sendMessage(tabId, { type: 'SIDE_PANEL_OPENED' });
-      console.debug(`${LOG_PREFIX} OPEN_SIDE_PANEL done`);
+      await chrome.tabs.sendMessage(tabId, { type: 'SIDE_PANEL_OPENED' });
+      return { success: true };
     } catch (error) {
-      console.error(`${LOG_PREFIX} OPEN_SIDE_PANEL failed`, error);
+      console.error(`${LOG_PREFIX} OPEN_SIDE_PANEL async part failed`, error);
+      throw error;
     }
-    return;
   }
 
   if (message?.type === 'CLOSE_SIDE_PANEL') {
     try {
-      await chrome.sidePanel.setOptions?.({ tabId, enabled: false });
+      await chrome.sidePanel.setOptions({ tabId, enabled: false });
       tabIdToPanelOpenState.set(tabId, false);
-      void chrome.tabs.sendMessage(tabId, { type: 'SIDE_PANEL_CLOSED' });
+      await chrome.tabs.sendMessage(tabId, { type: 'SIDE_PANEL_CLOSED' });
       console.debug(`${LOG_PREFIX} CLOSE_SIDE_PANEL done`);
+      return { success: true };
     } catch (error) {
       console.error(`${LOG_PREFIX} CLOSE_SIDE_PANEL failed`, error);
+      throw error;
     }
-    return;
   }
 
   if (message?.type === 'TOGGLE_SIDE_PANEL') {
-    // Fallback if client logic is insufficient
-    void toggleSidePanelForTab(tabId);
+    await toggleSidePanelForTab(tabId);
+    return { success: true };
   }
-});
+  
+  return undefined;
+};
 
-// Install tracking
-// Open welcome page on first install
 chrome.runtime.onInstalled.addListener(({ reason }) => {
   if (reason === 'install') {
     try {
@@ -262,12 +277,3 @@ chrome.runtime.onInstalled.addListener(({ reason }) => {
     }
   }
 });
-
-// Keep track of connected external ports from allowed domains
-// Removed external connections from onlineapp.* domains
-
-// Removed analytics helpers referencing onlineapp.pro
-
-// Removed broadcast notify to external clients
-
-// Removed external message handler for onlineapp.* domains

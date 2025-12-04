@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@assistant-ui/react-markdown": "^0.11.4",
+    "@extension/env": "workspace:*",
     "@extension/i18n": "workspace:*",
     "@extension/shared": "workspace:*",
     "@extension/storage": "workspace:*",
